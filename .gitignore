@@ -27,3 +27,5 @@ backups/
 __pycache__/
 *.py[cod]
 *.egg-info/
+mizan-results.sarif
+*.sarif
