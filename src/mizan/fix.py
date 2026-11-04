@@ -165,6 +165,57 @@ def _apply_to_requirements_txt(path, plan):
     return changed
 
 
+def _apply_to_pyproject_toml(path, plan):
+    """Rewrite `name==old` to `name==new` in pyproject.toml.
+
+    Uses plain text replacement (no TOML rewrite) to preserve formatting.
+    Handles PEP 621 arrays and Poetry `name = "version"` strings.
+    """
+    try:
+        content = path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+
+    pkg = plan.package
+    old_v = plan.current_version
+    new_v = plan.target_version
+    if not new_v:
+        return False
+
+    # Escape for regex
+    import re as _re
+    pkg_re = _re.escape(pkg)
+    old_re = _re.escape(old_v)
+
+    # Case 1: PEP 621 array entry: "name==old" (with optional marker/extras)
+    #   legacy = ["requests==2.0.0"]
+    pattern1 = _re.compile(
+        rf'("{pkg_re}(?:\[[^\]]*\])?\s*==\s*){old_re}(?=[\s;#"])'
+    )
+    new_content, n1 = pattern1.subn(rf'\g<1>{new_v}', content)
+
+    # Case 2: Poetry exact string: name = "old"
+    pattern2 = _re.compile(
+        rf'(^\s*{pkg_re}\s*=\s*"){old_re}(")',
+        _re.MULTILINE,
+    )
+    new_content, n2 = pattern2.subn(rf'\g<1>{new_v}\g<2>', new_content)
+
+    # Case 3: Poetry with ^/~ prefix: name = "^old"
+    pattern3 = _re.compile(
+        rf'(^\s*{pkg_re}\s*=\s*"[\^~]){old_re}(")',
+        _re.MULTILINE,
+    )
+    new_content, n3 = pattern3.subn(rf'\g<1>{new_v}\g<2>', new_content)
+
+    total = n1 + n2 + n3
+    if total == 0:
+        return False
+
+    path.write_text(new_content, encoding="utf-8")
+    return True
+
+
 def _apply_plan(root, plan):
     """Apply a single plan to the appropriate manifest. Returns bool."""
     manifest_path = root / plan.manifest
@@ -172,7 +223,8 @@ def _apply_plan(root, plan):
         return False
     if manifest_path.name == "requirements.txt":
         return _apply_to_requirements_txt(manifest_path, plan)
-    # future: pyproject.toml, package-lock.json
+    if manifest_path.name == "pyproject.toml":
+        return _apply_to_pyproject_toml(manifest_path, plan)
     return False
 
 
