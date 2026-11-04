@@ -32,6 +32,23 @@ inputs:
     required: false
     default: '3.11'
 
+  approve-prs:
+    description: 'Auto-approve eligible PRs (off by default; requires care)'
+    required: false
+    default: 'false'
+  merge-prs:
+    description: 'Auto-merge PRs after approval (implies approve-prs)'
+    required: false
+    default: 'false'
+  approve-exclude-paths:
+    description: 'Comma-separated paths that block auto-approval'
+    required: false
+    default: '.github/,Dockerfile,.env,secrets/,k8s/,terraform/,helm/'
+  approve-allowed-authors:
+    description: 'Comma-separated bot authors allowed to be auto-approved'
+    required: false
+    default: 'dependabot[bot],renovate[bot],github-actions[bot]'
+
 outputs:
   findings-count:
     description: 'Number of vulnerabilities found'
@@ -123,6 +140,28 @@ runs:
         for L in mizan security dependencies; do
           gh pr edit "$PR_URL" --add-label "$L" 2>/dev/null || true
         done
+
+    - name: Auto-approve and merge (safe)
+      if: |
+        github.event_name == 'pull_request'
+        && (inputs.approve-prs == 'true' || inputs.merge-prs == 'true')
+        && inputs.create-pr != 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        ARGS="--pr ${{ github.event.pull_request.number }}"
+        ARGS="$ARGS --findings ${{ steps.scan.outputs.findings-count }}"
+        ARGS="$ARGS --exclude-paths '${{ inputs.approve-exclude-paths }}'"
+        ARGS="$ARGS --allowed-authors '${{ inputs.approve-allowed-authors }}'"
+        if [ "${{ inputs.approve-prs }}" = "true" ]; then
+          ARGS="$ARGS --approve"
+        fi
+        if [ "${{ inputs.merge-prs }}" = "true" ]; then
+          ARGS="$ARGS --approve --merge"
+        fi
+        echo "Running: mizan approve $ARGS"
+        eval "mizan approve $ARGS"
 
     - name: Fail on findings
       if: inputs.fail-on-findings == 'true' && steps.scan.outputs.findings-count != '0'

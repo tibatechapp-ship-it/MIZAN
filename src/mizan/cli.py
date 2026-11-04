@@ -150,6 +150,26 @@ def main():
     )
     vuln_cmd.add_argument("--output", "-o", default=None)
 
+    approve_cmd = commands.add_parser(
+        "approve",
+        help="Safely auto-approve and optionally merge eligible PRs"
+    )
+    approve_cmd.add_argument("--pr", type=int, required=True)
+    approve_cmd.add_argument("--findings", type=int, default=0)
+    approve_cmd.add_argument("--exclude-paths", default="")
+    approve_cmd.add_argument(
+        "--allowed-authors",
+        default="dependabot[bot],renovate[bot],github-actions[bot]",
+    )
+    approve_cmd.add_argument("--allow-own", action="store_true",
+                             help="Allow approving PRs from the current bot (not recommended)")
+    approve_cmd.add_argument("--approve", action="store_true")
+    approve_cmd.add_argument("--merge", action="store_true")
+    approve_cmd.add_argument(
+        "--method", choices=["squash", "merge", "rebase"], default="squash"
+    )
+    approve_cmd.add_argument("--dry-run", action="store_true")
+
     fix_cmd = commands.add_parser(
         "fix",
         help="Apply safe dependency upgrades with test-based validation"
@@ -245,6 +265,56 @@ def main():
             if args.output:
                 argv.extend(["--output", args.output])
             return vuln_scan_main(argv)
+
+        elif args.command == "approve":
+            from .approval import (
+                is_pr_eligible, approve_pr, merge_pr,
+                DEFAULT_EXCLUDE_PATHS, DEFAULT_ALLOWED_AUTHORS,
+            )
+
+            excludes = [x.strip() for x in (args.exclude_paths or "").split(",") if x.strip()]
+            if not excludes:
+                excludes = list(DEFAULT_EXCLUDE_PATHS)
+
+            authors = [x.strip() for x in (args.allowed_authors or "").split(",") if x.strip()]
+            if not authors:
+                authors = list(DEFAULT_ALLOWED_AUTHORS)
+            if args.allow_own:
+                authors.append("github-actions[bot]")
+
+            ok, reason = is_pr_eligible(
+                args.pr,
+                findings_count=args.findings,
+                exclude_paths=tuple(excludes),
+                allowed_authors=tuple(authors),
+            )
+
+            print(f"eligibility: {'ELIGIBLE' if ok else 'BLOCKED'}")
+            print(f"reason     : {reason}")
+
+            if not ok:
+                return 1
+
+            if args.dry_run:
+                print("dry-run: no action taken")
+                return 0
+
+            if args.approve:
+                success, msg = approve_pr(
+                    args.pr,
+                    comment="Auto-approved by MIZAN: all checks passed, no findings.",
+                )
+                print(f"approve    : {'OK' if success else 'FAILED'} ({msg[:100]})")
+                if not success:
+                    return 1
+
+            if args.merge:
+                success, msg = merge_pr(args.pr, method=args.method, auto=True)
+                print(f"merge      : {'OK' if success else 'FAILED'} ({msg[:100]})")
+                if not success:
+                    return 1
+
+            return 0
 
         elif args.command == "fix":
             from .fix import main as fix_main

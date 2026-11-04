@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 from mizan.detector import _read_package_lock, _read_poetry_lock
 from mizan.sarif import build_sarif
 from mizan.scan import scan_repository
-from mizan.vulnerabilities import check_vulnerabilities, parse_requirements_txt
+from mizan.vulnerabilities import OsvScanError, check_vulnerabilities, parse_requirements_txt
 
 
 class LockFileTests(unittest.TestCase):
@@ -103,8 +103,9 @@ class RequirementsTxtTests(unittest.TestCase):
 
 class OsvClientTests(unittest.TestCase):
     @patch.dict(os.environ, {"MIZAN_DISABLE_OSV": "1"})
-    def test_disabled_returns_empty(self):
-        self.assertEqual(check_vulnerabilities("requests", "2.0.0", "PyPI"), [])
+    def test_disabled_raises_scan_error(self):
+        with self.assertRaises(OsvScanError):
+            check_vulnerabilities("requests", "2.0.0", "PyPI")
 
     @patch("mizan.vulnerabilities.urllib.request.urlopen")
     def test_returns_vulns_on_success(self, mock_urlopen):
