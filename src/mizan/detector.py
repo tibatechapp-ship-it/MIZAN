@@ -62,6 +62,9 @@ TOOLS = {
     "Java": ["Checkstyle", "JUnit"],
     "PHP": ["PHPStan", "PHPUnit"],
     "Ruby": ["RuboCop", "RSpec"],
+    "Dart": ["dart analyze", "dart test"],
+    "C#": ["dotnet format", "dotnet test"],
+    "C/C++": ["Clang-Tidy", "CTest"],
     "Docker": ["Trivy"],
 }
 

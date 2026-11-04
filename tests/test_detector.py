@@ -215,5 +215,48 @@ class DetectorTests(unittest.TestCase):
 
             self.assertNotIn("React", result["frameworks"])
 
+
+    def test_suggests_tools_for_dart(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "pubspec.yaml").write_text(
+                "name: demo\\n",
+                encoding="utf-8",
+            )
+
+            result = detect_project(str(root))
+
+            self.assertIn("Dart", result["languages"])
+            self.assertIn("dart analyze", result["suggested_tools"])
+            self.assertIn("dart test", result["suggested_tools"])
+
+    def test_suggests_tools_for_csharp(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "Program.cs").write_text(
+                "class Program {}\\n",
+                encoding="utf-8",
+            )
+
+            result = detect_project(str(root))
+
+            self.assertIn("C#", result["languages"])
+            self.assertIn("dotnet format", result["suggested_tools"])
+            self.assertIn("dotnet test", result["suggested_tools"])
+
+    def test_suggests_tools_for_cpp(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "main.cpp").write_text(
+                "int main() { return 0; }\\n",
+                encoding="utf-8",
+            )
+
+            result = detect_project(str(root))
+
+            self.assertIn("C/C++", result["languages"])
+            self.assertIn("Clang-Tidy", result["suggested_tools"])
+            self.assertIn("CTest", result["suggested_tools"])
+
 if __name__ == "__main__":
     unittest.main()
