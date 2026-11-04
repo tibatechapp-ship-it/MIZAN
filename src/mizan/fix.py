@@ -178,16 +178,53 @@ def _apply_plan(root, plan):
 
 # ----- test runner -----
 
+def _pytest_available():
+    """Return True if pytest is importable in the current interpreter."""
+    try:
+        import importlib.util
+        return importlib.util.find_spec("pytest") is not None
+    except Exception:
+        return False
+
+
 def detect_test_command(root):
     """Return a test command list if one is discoverable, else None."""
+    has_pytest_config = (
+        (root / "pytest.ini").exists()
+        or (root / "tox.ini").exists()
+        or (root / "conftest.py").exists()
+    )
     if (root / "pyproject.toml").exists():
+        try:
+            import tomllib
+        except ImportError:
+            try:
+                import tomli as tomllib
+            except ImportError:
+                tomllib = None
+        if tomllib:
+            try:
+                data = tomllib.loads(
+                    (root / "pyproject.toml").read_text(encoding="utf-8")
+                )
+                if "pytest" in data.get("tool", {}):
+                    has_pytest_config = True
+                for dep in data.get("project", {}).get("dependencies", []):
+                    if isinstance(dep, str) and "pytest" in dep.lower():
+                        has_pytest_config = True
+                        break
+            except (OSError, ValueError):
+                pass
+
+    if has_pytest_config and _pytest_available():
         return [sys.executable, "-m", "pytest", "-q"]
-    if (root / "pytest.ini").exists() or (root / "tox.ini").exists():
-        return [sys.executable, "-m", "pytest", "-q"]
+
     if (root / "tests").is_dir():
         return [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-q"]
+
     if (root / "package.json").exists():
         return ["npm", "test", "--silent"]
+
     return None
 
 
