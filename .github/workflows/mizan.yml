@@ -25,7 +25,7 @@ jobs:
           fetch-depth: 0
 
       - name: Run MIZAN
-        uses: ./.action
+        uses: ./action
         with:
           path: '.'
           auto-fix: 'false'
