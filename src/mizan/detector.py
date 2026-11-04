@@ -86,6 +86,19 @@ EXTENSIONS = {
 }
 
 MAX_FILES = 20000
+MAX_MANIFEST_SIZE = 2 * 1024 * 1024
+
+
+def _read_manifest_text(path, *, errors="strict"):
+    """Read a manifest only when its size does not exceed the limit."""
+    try:
+        with path.open("rb") as file:
+            raw = file.read(MAX_MANIFEST_SIZE + 1)
+        if len(raw) > MAX_MANIFEST_SIZE:
+            return None
+        return raw.decode("utf-8", errors=errors)
+    except (OSError, UnicodeError):
+        return None
 
 
 def collect_files(root: Path):
@@ -145,9 +158,13 @@ def _extract_requirement_name(value):
 
 
 def _read_json_dependencies(path):
+    content = _read_manifest_text(path)
+    if content is None:
+        return set()
+
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError):
+        data = json.loads(content)
+    except json.JSONDecodeError:
         return set()
 
     if not isinstance(data, dict):
@@ -176,9 +193,8 @@ def _read_json_dependencies(path):
 
 def _read_python_dependencies(path):
     """Read Python dependencies from requirements.txt or pyproject.toml."""
-    try:
-        content = path.read_text(encoding="utf-8", errors="ignore")
-    except OSError:
+    content = _read_manifest_text(path, errors="ignore")
+    if content is None:
         return set()
 
     if path.name == "requirements.txt":
@@ -338,3 +354,140 @@ def detect_project(directory="."):
         "execution_performed": False,
         "mode": "read-only",
     }
+...
+
+
+def _read_package_lock(path):
+    """Yield {name, version, ecosystem} from package-lock.json (v2/v3)."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    packages = data.get("packages") or {}
+    if not isinstance(packages, dict):
+        return
+    for key, entry in packages.items():
+        if not key or not isinstance(entry, dict):
+            continue
+        name = key.split("node_modules/")[-1]
+        version = entry.get("version")
+        if name and version:
+            yield {
+                "name": name,
+                "version": version,
+                "ecosystem": "npm",
+            }
+
+
+def _read_poetry_lock(path):
+    """Yield {name, version, ecosystem} from poetry.lock (TOML)."""
+    try:
+        try:
+            import tomllib
+        except ImportError:
+            import tomli as tomllib
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    for pkg in data.get("package", []):
+        if not isinstance(pkg, dict):
+            continue
+        name = pkg.get("name")
+        version = pkg.get("version")
+        if name and version:
+            yield {
+                "name": name,
+                "version": version,
+                "ecosystem": "PyPI",
+            }
+
+
+def _read_pipfile_lock(path):
+    """Yield {name, version, ecosystem} from Pipfile.lock."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    for section in ("default", "develop"):
+        for name, entry in (data.get(section) or {}).items():
+            if isinstance(entry, dict):
+                version = entry.get("version")
+                if version:
+                    yield {
+                        "name": name,
+                        "version": version.lstrip("="),
+                        "ecosystem": "PyPI",
+                    }
+
+
+def iter_locked_packages(files):
+    """Yield all exact-version packages from lock files in `files`."""
+    for path in files:
+        if path.name == "package-lock.json":
+            yield from _read_package_lock(path)
+        elif path.name == "poetry.lock":
+            yield from _read_poetry_lock(path)
+        elif path.name == "Pipfile.lock":
+            yield from _read_pipfile_lock(path)
+
+
+def _resolve_installed_version(name):
+    """Return installed version of `name`, or None if not installed."""
+    try:
+        from importlib.metadata import version, PackageNotFoundError
+    except ImportError:
+        return None
+    try:
+        return version(name)
+    except PackageNotFoundError:
+        return None
+
+
+def _read_pyproject_dependencies(path):
+    """Yield {name, version, ecosystem} from pyproject.toml.
+
+    Exact `==` pins are used directly. For range specifiers (`>=`, `~=`,
+    etc.), the currently installed version is used as a best-effort
+    resolution. Packages not installed locally are skipped.
+    """
+    try:
+        try:
+            import tomllib
+        except ImportError:
+            import tomli as tomllib
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+
+    project = data.get("project", {})
+    if not isinstance(project, dict):
+        return
+
+    deps = project.get("dependencies", [])
+    if not isinstance(deps, list):
+        return
+
+    import re as _re
+    pin = _re.compile(r"^([A-Za-z0-9][A-Za-z0-9_.-]*)\s*==\s*([^\s;#]+)")
+
+    for value in deps:
+        if not isinstance(value, str):
+            continue
+        match = pin.match(value)
+        if match:
+            yield {
+                "name": match.group(1),
+                "version": match.group(2),
+                "ecosystem": "PyPI",
+            }
+        else:
+            name_match = _re.match(r"^([A-Za-z0-9][A-Za-z0-9_.-]*)", value)
+            if not name_match:
+                continue
+            resolved = _resolve_installed_version(name_match.group(1))
+            if resolved:
+                yield {
+                    "name": name_match.group(1),
+                    "version": resolved,
+                    "ecosystem": "PyPI",
+                }

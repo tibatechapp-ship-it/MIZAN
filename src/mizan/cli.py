@@ -51,9 +51,7 @@ def main():
         description="MIZAN Software Analysis and Verification Engine"
     )
 
-    commands = parser.add_subparsers(
-        dest="command", required=True
-    )
+    commands = parser.add_subparsers(dest="command", required=True)
 
     inspect_cmd = commands.add_parser("inspect")
     inspect_cmd.add_argument("path", nargs="?", default=".")
@@ -76,9 +74,7 @@ def main():
     plugin_commands = plugins_cmd.add_subparsers(
         dest="plugin_command", required=True
     )
-
     plugin_commands.add_parser("list")
-
     plugin_info = plugin_commands.add_parser("info")
     plugin_info.add_argument("name")
 
@@ -104,7 +100,6 @@ def main():
         help="Inspect Git repository without modifying it"
     )
     git_cmd.add_argument("path", nargs="?", default=".")
-
 
     ci_cmd = commands.add_parser(
         "ci-scan",
@@ -142,6 +137,19 @@ def main():
         required=True
     )
 
+    # NEW: vuln-scan — scans dependencies for known vulnerabilities (OSV.dev)
+    vuln_cmd = commands.add_parser(
+        "vuln-scan",
+        help="Scan dependencies for known vulnerabilities via OSV.dev"
+    )
+    vuln_cmd.add_argument("path", nargs="?", default=".")
+    vuln_cmd.add_argument(
+        "--format",
+        choices=["sarif", "json"],
+        default="sarif"
+    )
+    vuln_cmd.add_argument("--output", "-o", default=None)
+
     args = parser.parse_args()
 
     try:
@@ -168,7 +176,6 @@ def main():
                 result = list_plugins()
             else:
                 result = get_plugin(args.name)
-
             print(json.dumps(result, indent=2, ensure_ascii=False))
 
         elif args.command == "scan":
@@ -176,14 +183,12 @@ def main():
                 args.path,
                 category=args.category
             )
-
             if args.format == "html":
                 rendered = render_html(result)
             else:
                 rendered = json.dumps(
                     result, indent=2, ensure_ascii=False
                 )
-
             save_or_print(rendered, args.output)
 
         elif args.command == "git-scan":
@@ -224,9 +229,17 @@ def main():
             entry = add_entry(args.message, args.actor)
             print(json.dumps(entry, indent=2, ensure_ascii=False))
 
+        elif args.command == "vuln-scan":
+            from .scan import main as vuln_scan_main
+            argv = [args.path, "--format", args.format]
+            if args.output:
+                argv.extend(["--output", args.output])
+            return vuln_scan_main(argv)
+
     except (ValueError, OSError) as exc:
         parser.exit(1, f"MIZAN error: {exc}\n")
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    sys.exit(main())
