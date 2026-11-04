@@ -150,6 +150,16 @@ def main():
     )
     vuln_cmd.add_argument("--output", "-o", default=None)
 
+    fix_cmd = commands.add_parser(
+        "fix",
+        help="Apply safe dependency upgrades with test-based validation"
+    )
+    fix_cmd.add_argument("path", nargs="?", default=".")
+    fix_cmd.add_argument("--plan", action="store_true")
+    fix_cmd.add_argument("--apply", action="store_true")
+    fix_cmd.add_argument("--no-validate", action="store_true")
+    fix_cmd.add_argument("--format", choices=["json", "text"], default="text")
+
     args = parser.parse_args()
 
     try:
@@ -235,6 +245,18 @@ def main():
             if args.output:
                 argv.extend(["--output", args.output])
             return vuln_scan_main(argv)
+
+        elif args.command == "fix":
+            from .fix import main as fix_main
+            argv = [args.path]
+            if args.plan:
+                argv.append("--plan")
+            if args.apply:
+                argv.append("--apply")
+            if args.no_validate:
+                argv.append("--no-validate")
+            argv.extend(["--format", args.format])
+            return fix_main(argv)
 
     except (ValueError, OSError) as exc:
         parser.exit(1, f"MIZAN error: {exc}\n")
