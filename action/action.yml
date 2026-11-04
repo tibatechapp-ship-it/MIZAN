@@ -95,40 +95,34 @@ runs:
           echo "::notice::No file changes to commit"
           exit 0
         fi
-
         BRANCH="mizan/auto-fix-$(date +%Y%m%d-%H%M%S)"
         git config user.name "MIZAN Bot"
         git config user.email "mizan-bot@users.noreply.github.com"
         git checkout -b "$BRANCH"
         git add -A
+        git reset -- '*.sarif' 2>/dev/null || true
+        if [ -z "$(git diff --cached --name-only)" ]; then
+          echo "::notice::No committable changes after excluding SARIF"
+          exit 0
+        fi
         git commit -m "fix(deps): auto-fix ${{ steps.scan.outputs.findings-count }} vulnerabilities via MIZAN"
-
         git push -u origin "$BRANCH"
-
-        PR_BODY=$(cat <<PR_EOF
-        ## MIZAN Auto-Fix
-
-        MIZAN detected **${{ steps.scan.outputs.findings-count }}** dependency vulnerabilities and applied safe fixes.
-
-        ### Changes
-        \`\`\`
-        $(git diff HEAD~1 --stat)
-        \`\`\`
-
-        ### Validation
-        - [x] Tests executed by FixValidator
-        - [x] Rollback-on-failure enabled
-
-        View the full SARIF report in the **Security** tab.
-        PR_EOF
-        )
-
-        gh pr create \
+        BASE_BRANCH="${{ github.event.pull_request.base.ref }}"
+        [ -z "$BASE_BRANCH" ] && BASE_BRANCH="${{ github.event.repository.default_branch }}"
+        [ -z "$BASE_BRANCH" ] && BASE_BRANCH="main"
+        echo "Base branch: $BASE_BRANCH"
+        PR_URL=$(gh pr create \
           --title "fix(deps): MIZAN auto-fix (${{ steps.scan.outputs.findings-count }} vulnerabilities)" \
-          --body "$PR_BODY" \
-          --base "${{ github.ref_name }}" \
-          --head "$BRANCH" \
-          --label "mizan,security,dependencies"
+          --body "MIZAN detected ${{ steps.scan.outputs.findings-count }} dependency vulnerabilities and applied safe fixes. See the Security tab for the full SARIF report." \
+          --base "$BASE_BRANCH" \
+          --head "$BRANCH" 2>&1) || {
+            echo "::warning::gh pr create failed: $PR_URL"
+            exit 0
+          }
+        echo "::notice::Created PR: $PR_URL"
+        for L in mizan security dependencies; do
+          gh pr edit "$PR_URL" --add-label "$L" 2>/dev/null || true
+        done
 
     - name: Fail on findings
       if: inputs.fail-on-findings == 'true' && steps.scan.outputs.findings-count != '0'
