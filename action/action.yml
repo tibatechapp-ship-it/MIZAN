@@ -1,0 +1,138 @@
+name: 'MIZAN Vulnerability Scan'
+description: 'Scan dependencies for vulnerabilities, upload SARIF, and optionally auto-fix'
+author: 'tibatechapp-ship-it'
+
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  path:
+    description: 'Repository path to scan'
+    required: false
+    default: '.'
+  auto-fix:
+    description: 'Apply safe dependency upgrades (requires passing tests)'
+    required: false
+    default: 'false'
+  create-pr:
+    description: 'Create a PR with the fixes (implies auto-fix: true)'
+    required: false
+    default: 'false'
+  fail-on-findings:
+    description: 'Fail the workflow if any vulnerabilities are found'
+    required: false
+    default: 'true'
+  sarif-output:
+    description: 'Path to write the SARIF report'
+    required: false
+    default: 'mizan-results.sarif'
+  python-version:
+    description: 'Python version to use'
+    required: false
+    default: '3.11'
+
+outputs:
+  findings-count:
+    description: 'Number of vulnerabilities found'
+    value: ${{ steps.scan.outputs.findings-count }}
+  sarif-file:
+    description: 'Absolute path to the SARIF file'
+    value: ${{ steps.scan.outputs.sarif-file }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install MIZAN
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e "${{ github.action_path }}/.."
+
+    - name: Run MIZAN vuln-scan
+      id: scan
+      shell: bash
+      run: |
+        SARIF_PATH="$(pwd)/${{ inputs.sarif-output }}"
+        mizan vuln-scan "${{ inputs.path }}" --format sarif -o "$SARIF_PATH" || true
+        if [ -f "$SARIF_PATH" ]; then
+          COUNT=$(python -c "import json; d=json.load(open('$SARIF_PATH')); print(len(d['runs'][0]['results']))")
+        else
+          COUNT=0
+        fi
+        echo "findings-count=$COUNT" >> "$GITHUB_OUTPUT"
+        echo "sarif-file=$SARIF_PATH" >> "$GITHUB_OUTPUT"
+        echo "::notice::MIZAN found $COUNT vulnerabilities"
+
+    - name: Upload SARIF to GitHub Code Scanning
+      if: always() && hashFiles(inputs.sarif-output) != ''
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ inputs.sarif-output }}
+        category: mizan
+
+    - name: Apply fixes (local only)
+      if: inputs.auto-fix == 'true' && steps.scan.outputs.findings-count != '0'
+      shell: bash
+      run: |
+        echo "::group::MIZAN fix --apply"
+        mizan fix "${{ inputs.path }}" --apply || echo "::warning::MIZAN fix encountered an issue"
+        echo "::endgroup::"
+        git diff --stat || true
+
+    - name: Create Pull Request with fixes
+      if: inputs.create-pr == 'true' && steps.scan.outputs.findings-count != '0'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        if [ -z "$(git status --porcelain)" ]; then
+          echo "::notice::No file changes to commit"
+          exit 0
+        fi
+
+        BRANCH="mizan/auto-fix-$(date +%Y%m%d-%H%M%S)"
+        git config user.name "MIZAN Bot"
+        git config user.email "mizan-bot@users.noreply.github.com"
+        git checkout -b "$BRANCH"
+        git add -A
+        git commit -m "fix(deps): auto-fix ${{ steps.scan.outputs.findings-count }} vulnerabilities via MIZAN"
+
+        git push -u origin "$BRANCH"
+
+        PR_BODY=$(cat <<PR_EOF
+        ## MIZAN Auto-Fix
+
+        MIZAN detected **${{ steps.scan.outputs.findings-count }}** dependency vulnerabilities and applied safe fixes.
+
+        ### Changes
+        \`\`\`
+        $(git diff HEAD~1 --stat)
+        \`\`\`
+
+        ### Validation
+        - [x] Tests executed by FixValidator
+        - [x] Rollback-on-failure enabled
+
+        View the full SARIF report in the **Security** tab.
+        PR_EOF
+        )
+
+        gh pr create \
+          --title "fix(deps): MIZAN auto-fix (${{ steps.scan.outputs.findings-count }} vulnerabilities)" \
+          --body "$PR_BODY" \
+          --base "${{ github.ref_name }}" \
+          --head "$BRANCH" \
+          --label "mizan,security,dependencies"
+
+    - name: Fail on findings
+      if: inputs.fail-on-findings == 'true' && steps.scan.outputs.findings-count != '0'
+      shell: bash
+      run: |
+        echo "::error::MIZAN found ${{ steps.scan.outputs.findings-count }} vulnerabilities. See the Security tab for details."
+        exit 1

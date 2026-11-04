@@ -1,0 +1,33 @@
+name: MIZAN Security Scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 2 * * 1'  # Every Monday at 02:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  security-events: write
+  pull-requests: write
+
+jobs:
+  scan:
+    name: MIZAN Vulnerability Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run MIZAN
+        uses: ./.action
+        with:
+          path: '.'
+          auto-fix: 'false'
+          create-pr: 'false'
+          fail-on-findings: 'true'
