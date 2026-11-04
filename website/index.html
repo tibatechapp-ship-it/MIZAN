@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#080b12">
+<meta name="description" content="MIZAN — Intelligent Software Analysis, Testing and Verification Engine.">
+<title>MIZAN — Software Intelligence Engine</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+<style>
+:root {
+  --bg:#080b12;
+  --panel:#101621;
+  --panel2:#121c29;
+  --text:#f3f6fc;
+  --muted:#8793a8;
+  --line:rgba(255,255,255,.09);
+  --cyan:#55e6d0;
+  --blue:#648bff;
+  --purple:#a78bfa;
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+html { scroll-behavior:smooth; }
+body {
+  background:var(--bg);
+  color:var(--text);
+  font-family:Inter, sans-serif;
+  overflow-x:hidden;
+}
+a { text-decoration:none; color:inherit; }
+button { font:inherit; }
+.container { width:min(1160px, calc(100% - 44px)); margin:auto; }
+
+nav {
+  height:76px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  border-bottom:1px solid var(--line);
+  position:sticky;
+  top:0;
+  z-index:20;
+  background:rgba(8,11,18,.85);
+  backdrop-filter:blur(18px);
+}
+.brand { display:flex; align-items:center; gap:12px; font-weight:900; letter-spacing:2px; }
+.logo {
+  width:38px;height:38px;
+  display:grid;place-items:center;
+  border:1px solid rgba(85,230,208,.45);
+  border-radius:12px;
+  color:var(--cyan);
+  font-size:20px;
+  background:rgba(85,230,208,.08);
+  box-shadow:0 0 24px rgba(85,230,208,.12);
+}
+.navlinks { display:flex; align-items:center; gap:30px; color:#a9b4c6; font-size:13px; }
+.navlinks a:hover { color:var(--cyan); }
+.nav-cta {
+  padding:11px 17px;
+  border:1px solid rgba(85,230,208,.45);
+  border-radius:8px;
+  color:var(--cyan);
+  font-size:12px;
+  font-weight:700;
+}
+.menu { display:none; background:none; border:0; color:white; font-size:25px; }
+
+.hero {
+  padding:110px 0 90px;
+  text-align:center;
+  position:relative;
+  overflow:hidden;
+}
+.hero:before {
+  content:"";
+  position:absolute;
+  width:650px;height:500px;
+  background:radial-gradient(ellipse,rgba(85,230,208,.12),transparent 70%);
+  top:-190px;left:50%;transform:translateX(-50%);
+  pointer-events:none;
+}
+.eyebrow {
+  display:inline-flex;
+  gap:9px;
+  align-items:center;
+  padding:8px 13px;
+  border:1px solid var(--line);
+  border-radius:30px;
+  color:var(--cyan);
+  font-family:"DM Mono",monospace;
+  font-size:11px;
+  letter-spacing:1px;
+  margin-bottom:28px;
+  background:rgba(85,230,208,.04);
+}
+.dot { width:7px;height:7px;border-radius:50%;background:var(--cyan);box-shadow:0 0 12px var(--cyan); }
+h1 {
+  font-size:clamp(48px,8vw,88px);
+  line-height:1.03;
+  letter-spacing:-5px;
+  font-weight:900;
+  max-width:950px;
+  margin:auto;
+}
+.gradient {
+  background:linear-gradient(100deg,#55e6d0 10%,#7ca8ff 55%,#b69bff);
+  -webkit-background-clip:text;
+  background-clip:text;
+  color:transparent;
+}
+.hero p {
+  color:var(--muted);
+  max-width:650px;
+  margin:25px auto 32px;
+  font-size:16px;
+  line-height:1.9;
+}
+.actions { display:flex; justify-content:center; gap:13px; flex-wrap:wrap; }
+.btn {
+  padding:15px 23px;
+  border-radius:9px;
+  font-size:13px;
+  font-weight:800;
+  transition:.25s;
+}
+.btn-primary {
+  color:#071411;
+  background:var(--cyan);
+  box-shadow:0 7px 30px rgba(85,230,208,.16);
+}
+.btn-primary:hover { transform:translateY(-3px); box-shadow:0 12px 35px rgba(85,230,208,.28); }
+.btn-secondary { border:1px solid var(--line); color:white; background:#111722; }
+.btn-secondary:hover { border-color:var(--cyan); }
+
+.terminal {
+  width:min(780px,100%);
+  margin:75px auto 0;
+  border:1px solid rgba(255,255,255,.13);
+  border-radius:15px;
+  overflow:hidden;
+  background:#0c111a;
+  text-align:left;
+  box-shadow:0 30px 100px rgba(0,0,0,.4);
+}
+.terminal-head {
+  padding:14px 18px;
+  border-bottom:1px solid var(--line);
+  display:flex;align-items:center;justify-content:space-between;
+  color:#8290a5;font:11px "DM Mono",monospace;
+}
+.lights { display:flex; gap:6px; }
+.lights i { width:8px;height:8px;border-radius:50%;background:#ff6d69; }
+.lights i:nth-child(2){background:#f5c45d}
+.lights i:nth-child(3){background:#5cdb9a}
+.terminal-body { padding:25px; font:12px/2 "DM Mono",monospace; color:#b8c5d6; }
+.prompt { color:var(--cyan); }
+.ok { color:#69e7ae; }
+.dim { color:#718097; }
+
+.stats {
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  border-top:1px solid var(--line);
+  border-bottom:1px solid var(--line);
+  padding:34px 0;
+}
+.stat { text-align:center; border-right:1px solid var(--line); }
+.stat:last-child { border:0; }
+.stat strong { display:block;font-size:27px;letter-spacing:-1px; }
+.stat span { color:var(--muted);font-size:11px; margin-top:8px;display:block; }
+
+section { padding:105px 0; }
+.section-tag {
+  color:var(--cyan);
+  font:11px "DM Mono",monospace;
+  letter-spacing:2px;
+  text-transform:uppercase;
+  margin-bottom:16px;
+}
+.section-title {
+  font-size:clamp(32px,5vw,49px);
+  letter-spacing:-2px;
+  line-height:1.15;
+}
+.section-desc { color:var(--muted); line-height:1.9; max-width:590px; margin-top:15px; font-size:14px; }
+
+.features-grid {
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:16px;
+  margin-top:48px;
+}
+.feature {
+  padding:27px;
+  border:1px solid var(--line);
+  border-radius:13px;
+  background:linear-gradient(145deg,rgba(255,255,255,.035),rgba(255,255,255,.008));
+  transition:.25s;
+}
+.feature:hover { transform:translateY(-5px); border-color:rgba(85,230,208,.35); }
+.feature-icon {
+  width:43px;height:43px;
+  display:grid;place-items:center;
+  border-radius:11px;
+  background:rgba(85,230,208,.09);
+  color:var(--cyan);
+  font-size:20px;
+  margin-bottom:22px;
+}
+.feature h3 { font-size:16px; margin-bottom:11px; }
+.feature p { color:var(--muted);font-size:12px;line-height:1.9; }
+
+.architecture {
+  background:linear-gradient(180deg,transparent,rgba(100,139,255,.045),transparent);
+}
+.arch-grid {
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:15px;
+  margin-top:45px;
+}
+.arch-item {
+  padding:22px;
+  border:1px solid var(--line);
+  border-radius:11px;
+  background:var(--panel);
+  display:flex;gap:17px;align-items:flex-start;
+}
+.arch-number {
+  font:12px "DM Mono",monospace;
+  color:var(--cyan);
+  padding:8px 10px;
+  border:1px solid rgba(85,230,208,.2);
+  border-radius:7px;
+}
+.arch-item h3 { font-size:14px;margin:4px 0 8px; }
+.arch-item p { color:var(--muted);font-size:12px;line-height:1.7; }
+
+.principles {
+  display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center;
+}
+.principle-list { display:grid;gap:17px;margin-top:30px; }
+.principle {
+  display:flex;gap:13px;color:#c0cad8;font-size:13px;align-items:center;
+}
+.check { color:var(--cyan);font-weight:900; }
+.principle-panel {
+  padding:32px;
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:15px;
+}
+.panel-top { display:flex;justify-content:space-between;color:var(--muted);font:10px "DM Mono",monospace;margin-bottom:25px; }
+.bar { height:5px;background:#202b39;border-radius:9px;margin:15px 0 23px;overflow:hidden; }
+.bar span { display:block;height:100%;width:76%;background:linear-gradient(90deg,var(--cyan),var(--blue));border-radius:9px; }
+.panel-line { display:flex;justify-content:space-between;font-size:12px;color:#c1cbd8; }
+.panel-line b { color:var(--cyan);font:11px "DM Mono",monospace; }
+
+.cta {
+  text-align:center;
+  padding:75px 30px;
+  border:1px solid rgba(85,230,208,.2);
+  border-radius:18px;
+  background:radial-gradient(ellipse at 50% 100%,rgba(85,230,208,.10),transparent 65%),#0e1520;
+}
+.cta h2 { font-size:clamp(30px,5vw,48px);letter-spacing:-2px; }
+.cta p { color:var(--muted);font-size:13px;line-height:1.8;margin:17px auto 27px;max-width:520px; }
+
+footer {
+  border-top:1px solid var(--line);
+  padding:30px 0;
+  color:var(--muted);
+  font-size:11px;
+}
+.footer-inner { display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;align-items:center; }
+.footer-brand { color:white;font-weight:900;letter-spacing:2px; }
+
+.reveal { opacity:0;transform:translateY(18px);transition:.7s ease; }
+.reveal.visible { opacity:1;transform:none; }
+
+@media(max-width:800px) {
+  .navlinks { display:none; }
+  .menu { display:block; }
+  .navlinks.open {
+    display:flex;position:absolute;top:76px;left:0;right:0;
+    padding:25px;background:#0d131e;flex-direction:column;
+    border-bottom:1px solid var(--line);
+  }
+  h1 { letter-spacing:-3px; }
+  .features-grid { grid-template-columns:1fr 1fr; }
+  .stats { grid-template-columns:1fr 1fr;gap:25px; }
+  .stat:nth-child(2) { border:0; }
+  .arch-grid { grid-template-columns:1fr; }
+  .principles { grid-template-columns:1fr; }
+}
+@media(max-width:520px) {
+  .container { width:calc(100% - 30px); }
+  .hero { padding:80px 0 65px; }
+  .hero p { font-size:14px; }
+  .features-grid { grid-template-columns:1fr; }
+  section { padding:75px 0; }
+  .terminal-body { padding:16px;font-size:10px; }
+  .stat strong { font-size:23px; }
+}
+</style>
+</head>
+
+<body>
+
+<nav>
+  <div class="container" style="display:flex;align-items:center;justify-content:space-between;">
+    <a href="#" class="brand">
+      <span class="logo">M</span>
+      <span>MIZAN</span>
+    </a>
+
+    <div class="navlinks" id="navlinks">
+      <a href="#features">Capabilities</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#principles">Principles</a>
+      <a href="#about">About</a>
+      <a class="nav-cta" href="https://github.com/tibatechapp-ship-it/MIZAN" target="_blank">GitHub ↗</a>
+    </div>
+    <button class="menu" onclick="document.getElementById('navlinks').classList.toggle('open')">☰</button>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="container">
+    <div class="eyebrow"><span class="dot"></span> SOFTWARE INTELLIGENCE ENGINE</div>
+
+    <h1>
+      Understand Code.<br>
+      <span class="gradient">Verify Everything.</span>
+    </h1>
+
+    <p>
+      An intelligent software analysis and verification engine.
+      MIZAN helps developers understand repositories, identify risks,
+      and build confidence through evidence-driven engineering.
+    </p>
+
+    <div class="actions">
+      <a class="btn btn-primary" href="#features">Explore MIZAN ↗</a>
+      <a class="btn btn-secondary" href="https://github.com/tibatechapp-ship-it/MIZAN" target="_blank">View on GitHub</a>
+    </div>
+
+    <div class="terminal">
+      <div class="terminal-head">
+        <div class="lights"><i></i><i></i><i></i></div>
+        <span>mizan — terminal</span>
+        <span>v0.1.0</span>
+      </div>
+      <div class="terminal-body">
+        <div><span class="prompt">$</span> mizan inspect ./repository</div>
+        <div class="ok">✓ Repository structure discovered</div>
+        <div><span class="prompt">$</span> mizan analyze ./repository</div>
+        <div class="dim">Initializing static analysis engine...</div>
+        <div class="ok">✓ Source files inspected</div>
+        <div class="ok">✓ Risk patterns evaluated</div>
+        <div class="ok">✓ Structured findings generated</div>
+        <div style="margin-top:10px"><span class="prompt">mizan@engine</span> <span class="dim">› Ready for verification.</span></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <div class="stats">
+    <div class="stat"><strong>01</strong><span>INTELLIGENCE ENGINE</span></div>
+    <div class="stat"><strong>06</strong><span>CORE COMPONENTS</span></div>
+    <div class="stat"><strong>100%</strong><span>TRANSPARENT REPORTS</span></div>
+    <div class="stat"><strong>OPEN</strong><span>OPEN SOURCE VISION</span></div>
+  </div>
+</div>
+
+<section id="features">
+  <div class="container">
+    <div class="section-tag">01 / CAPABILITIES</div>
+    <h2 class="section-title">Engineering intelligence<br><span class="gradient">at every layer.</span></h2>
+    <p class="section-desc">
+      A modular foundation for understanding software quality,
+      detecting potential risks, and supporting reliable engineering decisions.
+    </p>
+
+    <div class="features-grid">
+      <article class="feature reveal">
+        <div class="feature-icon">⌘</div>
+        <h3>Repository Intelligence</h3>
+        <p>Discover project structures, source files, and important engineering components.</p>
+      </article>
+      <article class="feature reveal">
+        <div class="feature-icon">⌕</div>
+        <h3>Static Analysis</h3>
+        <p>Inspect source code and identify suspicious patterns without executing inspected code.</p>
+      </article>
+      <article class="feature reveal">
+        <div class="feature-icon">⚡</div>
+        <h3>Risk Detection</h3>
+        <p>Surface potential security and maintainability concerns with traceable findings.</p>
+      </article>
+      <article class="feature reveal">
+        <div class="feature-icon">◈</div>
+        <h3>Test Intelligence</h3>
+        <p>Build toward automated test discovery, generation, and validation workflows.</p>
+      </article>
+      <article class="feature reveal">
+        <div class="feature-icon">✓</div>
+        <h3>Evidence Verification</h3>
+        <p>Connect engineering claims to reproducible test results and verifiable evidence.</p>
+      </article>
+      <article class="feature reveal">
+        <div class="feature-icon">⌁</div>
+        <h3>AI Collaboration</h3>
+        <p>Maintain a transparent record of human and AI engineering contributions.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="architecture" id="architecture">
+  <div class="container">
+    <div class="section-tag">02 / ARCHITECTURE</div>
+    <h2 class="section-title">A modular engineering<br><span class="gradient">foundation.</span></h2>
+    <p class="section-desc">
+      Independent components designed to evolve into a unified software
+      intelligence and verification platform.
+    </p>
+
+    <div class="arch-grid">
+      <div class="arch-item reveal"><span class="arch-number">01</span><div><h3>Core Engine</h3><p>Coordinates analysis operations and structured execution workflows.</p></div></div>
+      <div class="arch-item reveal"><span class="arch-number">02</span><div><h3>Repository Analyzer</h3><p>Maps repository structures and discovers source code components.</p></div></div>
+      <div class="arch-item reveal"><span class="arch-number">03</span><div><h3>Static Analysis</h3><p>Evaluates code patterns and reports potential issues.</p></div></div>
+      <div class="arch-item reveal"><span class="arch-number">04</span><div><h3>Test Generator</h3><p>Future module for test discovery and test creation assistance.</p></div></div>
+      <div class="arch-item reveal"><span class="arch-number">05</span><div><h3>Verification Engine</h3><p>Validates proposed fixes using repeatable verification procedures.</p></div></div>
+      <div class="arch-item reveal"><span class="arch-number">06</span><div><h3>Collaboration Ledger</h3><p>Tracks engineering decisions and contribution provenance.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<section id="principles">
+  <div class="container principles">
+    <div>
+      <div class="section-tag">03 / ENGINEERING PRINCIPLES</div>
+      <h2 class="section-title">Trust is built<br><span class="gradient">with evidence.</span></h2>
+      <p class="section-desc">MIZAN is designed around transparent engineering, reproducible results, and human oversight.</p>
+      <div class="principle-list">
+        <div class="principle"><span class="check">✓</span> Evidence-driven verification</div>
+        <div class="principle"><span class="check">✓</span> Transparent AI contribution records</div>
+        <div class="principle"><span class="check">✓</span> Modular and extensible architecture</div>
+        <div class="principle"><span class="check">✓</span> Human-controlled engineering decisions</div>
+        <div class="principle"><span class="check">✓</span> Read-only inspection by default</div>
+      </div>
+    </div>
+
+    <div class="principle-panel reveal">
+      <div class="panel-top"><span>ENGINE STATUS</span><span>FOUNDATION / 0.1</span></div>
+      <div class="panel-line"><span>Repository inspection</span><b>ACTIVE</b></div>
+      <div class="bar"><span style="width:100%"></span></div>
+      <div class="panel-line"><span>Static analysis</span><b>FOUNDATION</b></div>
+      <div class="bar"><span style="width:76%"></span></div>
+      <div class="panel-line"><span>Test intelligence</span><b>PLANNED</b></div>
+      <div class="bar"><span style="width:15%"></span></div>
+      <div class="panel-line"><span>Verification engine</span><b>PLANNED</b></div>
+      <div class="bar"><span style="width:8%"></span></div>
+      <p style="color:var(--muted);font-size:10px;line-height:1.8;margin-top:25px">
+        Indicative development roadmap, not measured performance metrics.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section id="about">
+  <div class="container">
+    <div class="cta">
+      <div class="section-tag">BUILD WITH MIZAN</div>
+      <h2>Make software quality<br><span class="gradient">measurable.</span></h2>
+      <p>
+        Join the journey toward more transparent, intelligent,
+        and verifiable software engineering.
+      </p>
+      <a class="btn btn-primary" href="https://github.com/tibatechapp-ship-it/MIZAN" target="_blank">Explore the Repository ↗</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container footer-inner">
+    <div class="footer-brand">MIZAN <span style="color:var(--cyan)">/</span></div>
+    <div>Intelligent Software Analysis & Verification.</div>
+    <div>Open-source project · 2026</div>
+  </div>
+</footer>
+
+<script>
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if(entry.isIntersecting) {
+      entry.target.classList.add("visible");
+      observer.unobserve(entry.target);
+    }
+  });
+},{threshold:.12});
+
+document.querySelectorAll(".reveal").forEach(el => observer.observe(el));
+</script>
+
+</body>
+</html>

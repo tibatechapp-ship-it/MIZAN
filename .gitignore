@@ -7,3 +7,23 @@ venv/
 .mypy_cache/
 reports/*.json
 .mizan/
+
+# Generated reports
+reports/*.json
+reports/*.html
+
+# Local backups
+backups/
+
+# Local runtime data
+.mizan/
+
+# Environment secrets
+.env
+.env.*
+!.env.example
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
