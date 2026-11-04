@@ -28,6 +28,6 @@ jobs:
         uses: ./action
         with:
           path: '.'
-          auto-fix: 'false'
-          create-pr: 'false'
+          auto-fix: 'true'
+          create-pr: 'true'
           fail-on-findings: 'true'
