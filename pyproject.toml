@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mizan-engine"
+version = "0.1.0"
+description = "AI-powered software analysis and verification engine"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "MIZAN Contributors"}]
+
+[project.scripts]
+mizan = "mizan.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
