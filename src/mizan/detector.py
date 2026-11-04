@@ -39,6 +39,20 @@ FRAMEWORKS = {
     "Laravel": ["laravel/framework"],
 }
 
+
+FRAMEWORK_MANIFESTS = {
+    "FastAPI": ("pyproject.toml", "requirements.txt"),
+    "Django": ("pyproject.toml", "requirements.txt"),
+    "Flask": ("pyproject.toml", "requirements.txt"),
+    "React": ("package.json",),
+    "Next.js": ("package.json",),
+    "Vue": ("package.json",),
+    "Angular": ("package.json",),
+    "Svelte": ("package.json",),
+    "Express": ("package.json",),
+    "Laravel": ("composer.json",),
+}
+
 TOOLS = {
     "Python": ["Ruff", "Mypy", "Bandit", "Pytest"],
     "JavaScript": ["ESLint", "npm audit", "Jest"],
@@ -274,22 +288,28 @@ def detect_project(directory="."):
         if suffix in suffixes and language not in languages:
             languages.append(language)
 
-    dependencies = set()
+    dependencies_by_manifest = {}
+
+    supported_manifests = {
+        "package.json",
+        "composer.json",
+        "pyproject.toml",
+        "requirements.txt",
+    }
 
     for path in files:
-        if path.name in {
-            "package.json",
-            "composer.json",
-            "pyproject.toml",
-            "requirements.txt",
-        }:
-            dependencies.update(_read_dependencies(path))
+        if path.name in supported_manifests:
+            dependencies_by_manifest.setdefault(path.name, set()).update(
+                _read_dependencies(path)
+            )
 
     frameworks = sorted(
         framework
         for framework, indicators in FRAMEWORKS.items()
         if any(
-            _normalize_package(indicator) in dependencies
+            _normalize_package(indicator)
+            in dependencies_by_manifest.get(manifest, set())
+            for manifest in FRAMEWORK_MANIFESTS.get(framework, ())
             for indicator in indicators
         )
     )

@@ -189,5 +189,31 @@ class DetectorTests(unittest.TestCase):
             )
 
 
+
+
+    def test_does_not_detect_php_framework_from_package_json(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "package.json").write_text(
+                '{"dependencies":{"laravel/framework":"^11.0"}}',
+                encoding="utf-8",
+            )
+
+            result = detect_project(str(root))
+
+            self.assertNotIn("Laravel", result["frameworks"])
+
+    def test_does_not_detect_javascript_framework_from_composer_json(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "composer.json").write_text(
+                '{"require":{"react":"^19.0"}}',
+                encoding="utf-8",
+            )
+
+            result = detect_project(str(root))
+
+            self.assertNotIn("React", result["frameworks"])
+
 if __name__ == "__main__":
     unittest.main()
