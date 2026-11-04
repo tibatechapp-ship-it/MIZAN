@@ -1,3 +1,4 @@
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -319,6 +320,70 @@ class DetectorTests(unittest.TestCase):
 
             self.assertEqual(len(files), 2)
             self.assertTrue(truncated)
+
+
+    def test_collect_files_ignores_fifo(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            regular_file = root / "inside.py"
+            regular_file.write_text("pass", encoding="utf-8")
+
+            fifo = root / "pipe"
+            try:
+                os.mkfifo(fifo)
+            except (OSError, NotImplementedError) as exc:
+                self.skipTest(f"FIFO unavailable: {exc}")
+
+            files, truncated = collect_files(root)
+
+            self.assertIn(regular_file, files)
+            self.assertNotIn(fifo, files)
+            self.assertFalse(truncated)
+
+    def test_collect_files_ignores_excluded_directories(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            excluded = root / ".venv"
+            excluded.mkdir()
+
+            regular_file = root / "inside.py"
+            regular_file.write_text("pass", encoding="utf-8")
+
+            secret_file = excluded / "secret.py"
+            secret_file.write_text("secret", encoding="utf-8")
+
+            files, truncated = collect_files(root)
+
+            self.assertIn(regular_file, files)
+            self.assertNotIn(secret_file, files)
+            self.assertFalse(truncated)
+
+    def test_collect_files_skips_inaccessible_subdirectory(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            blocked = root / "blocked"
+            blocked.mkdir()
+
+            regular_file = root / "inside.py"
+            regular_file.write_text("pass", encoding="utf-8")
+            (blocked / "secret.py").write_text("secret", encoding="utf-8")
+
+            real_scandir = os.scandir
+
+            def guarded_scandir(directory):
+                if Path(directory) == blocked:
+                    raise PermissionError("Access denied")
+                return real_scandir(directory)
+
+            with patch(
+                "mizan.detector.os.scandir",
+                side_effect=guarded_scandir,
+            ):
+                files, truncated = collect_files(root)
+
+            self.assertIn(regular_file, files)
+            self.assertNotIn(blocked / "secret.py", files)
+            self.assertFalse(truncated)
 
 if __name__ == "__main__":
     unittest.main()
