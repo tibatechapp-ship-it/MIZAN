@@ -39,6 +39,37 @@ class LockFileTests(unittest.TestCase):
             self.assertEqual(deps, {("requests", "2.0.0"), ("flask", "1.0.0")})
 
 
+class PyprojectOptionalTests(unittest.TestCase):
+    def test_reads_optional_dependencies(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "pyproject.toml"
+            content = """[project]
+name = "demo"
+dependencies = ["flask>=2.0"]
+
+[project.optional-dependencies]
+legacy = ["requests==2.0.0"]
+"""
+            path.write_text(content, encoding="utf-8")
+            from mizan.detector import _read_pyproject_dependencies
+            deps = {(d["name"], d["version"]) for d in _read_pyproject_dependencies(path)}
+            self.assertIn(("requests", "2.0.0"), deps)
+
+    def test_reads_poetry_dependencies(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "pyproject.toml"
+            path.write_text(
+                "[tool.poetry.dependencies]\n"
+                "python = '^3.12'\n"
+                "requests = '2.0.0'\n",
+                encoding="utf-8",
+            )
+            from mizan.detector import _read_pyproject_dependencies
+            deps = {(d["name"], d["version"]) for d in _read_pyproject_dependencies(path)}
+            self.assertIn(("requests", "2.0.0"), deps)
+            self.assertNotIn("python", {d["name"] for d in _read_pyproject_dependencies(path)})
+
+
 class PyprojectTests(unittest.TestCase):
     def test_reads_exact_pin(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -112,6 +143,25 @@ class SarifTests(unittest.TestCase):
             sarif["runs"][0]["results"][0]["ruleId"],
             "MIZAN-PyPI-GHSA-xxxx",
         )
+
+
+class BackupIgnoredTests(unittest.TestCase):
+    def test_ignores_mizan_backup_directory(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "requirements.txt").write_text("requests==2.33.0\n")
+            backup = root / ".mizan" / "backup" / "20260101"
+            backup.mkdir(parents=True)
+            (backup / "requirements.txt").write_text("requests==2.0.0\n")
+
+            from mizan.detector import collect_files
+            files, _ = collect_files(root)
+            names = {f.name for f in files}
+            self.assertIn("requirements.txt", names)
+            self.assertFalse(
+                any(".mizan" in str(f) for f in files),
+                "Backup files must be excluded from scan"
+            )
 
 
 class ScanEndToEndTests(unittest.TestCase):

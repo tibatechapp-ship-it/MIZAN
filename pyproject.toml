@@ -20,3 +20,9 @@ mizan = "mizan.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[project.optional-dependencies]
+# Self-test extra used to demonstrate MIZAN's ability to scan and fix
+# its own dependencies. Originally pinned to requests==2.0.0 (13 vulns);
+# MIZAN detected and upgraded to 2.33.0 via `mizan fix --apply`.
+self-test = ["requests==2.33.0"]

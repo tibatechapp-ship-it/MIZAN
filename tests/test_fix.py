@@ -99,6 +99,49 @@ class ApplyTests(unittest.TestCase):
             self.assertIn("# deps", content)
 
 
+class PyprojectFixTests(unittest.TestCase):
+    def test_rewrites_pep621_pin(self):
+        from mizan.fix import _apply_to_pyproject_toml
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "pyproject.toml"
+            path.write_text(
+                '[project]\n'
+                'name = "demo"\n'
+                '[project.optional-dependencies]\n'
+                'legacy = ["requests==2.0.0"]\n',
+                encoding="utf-8",
+            )
+            plan = FixPlan(
+                manifest="pyproject.toml", package="requests",
+                ecosystem="PyPI", current_version="2.0.0",
+                target_version="2.33.0", vuln_ids=["X"],
+            )
+            changed = _apply_to_pyproject_toml(path, plan)
+            self.assertTrue(changed)
+            content = path.read_text(encoding="utf-8")
+            self.assertIn("requests==2.33.0", content)
+            self.assertNotIn("requests==2.0.0", content)
+
+    def test_rewrites_poetry_string(self):
+        from mizan.fix import _apply_to_pyproject_toml
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "pyproject.toml"
+            path.write_text(
+                '[tool.poetry.dependencies]\n'
+                'requests = "2.0.0"\n',
+                encoding="utf-8",
+            )
+            plan = FixPlan(
+                manifest="pyproject.toml", package="requests",
+                ecosystem="PyPI", current_version="2.0.0",
+                target_version="2.33.0", vuln_ids=["X"],
+            )
+            changed = _apply_to_pyproject_toml(path, plan)
+            self.assertTrue(changed)
+            content = path.read_text(encoding="utf-8")
+            self.assertIn('requests = "2.33.0"', content)
+
+
 class TestRunnerTests(unittest.TestCase):
     def test_detects_unittest_when_tests_dir_present(self):
         with tempfile.TemporaryDirectory() as temp:

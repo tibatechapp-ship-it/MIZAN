@@ -9,6 +9,7 @@ IGNORED = {
     ".git", ".venv", "venv", "__pycache__",
     "node_modules", "dist", "build", ".next",
     ".pytest_cache", ".mypy_cache",
+    ".mizan",  # MIZAN backups and runtime data
 }
 
 MARKERS = {
@@ -446,9 +447,15 @@ def _resolve_installed_version(name):
 def _read_pyproject_dependencies(path):
     """Yield {name, version, ecosystem} from pyproject.toml.
 
-    Exact `==` pins are used directly. For range specifiers (`>=`, `~=`,
-    etc.), the currently installed version is used as a best-effort
-    resolution. Packages not installed locally are skipped.
+    Reads:
+    - [project] dependencies
+    - [project] optional-dependencies (PEP 621)
+    - [dependency-groups] (PEP 735)
+    - [tool.poetry.dependencies], [tool.poetry.dev-dependencies],
+      [tool.poetry.group.*.dependencies] (Poetry)
+
+    Exact `==` pins are used directly. For range specifiers, the currently
+    installed version is used as a best-effort resolution.
     """
     try:
         try:
@@ -459,35 +466,80 @@ def _read_pyproject_dependencies(path):
     except (OSError, ValueError):
         return
 
-    project = data.get("project", {})
-    if not isinstance(project, dict):
-        return
-
-    deps = project.get("dependencies", [])
-    if not isinstance(deps, list):
-        return
-
     import re as _re
     pin = _re.compile(r"^([A-Za-z0-9][A-Za-z0-9_.-]*)\s*==\s*([^\s;#]+)")
+    name_re = _re.compile(r"^([A-Za-z0-9][A-Za-z0-9_.-]*)")
 
-    for value in deps:
+    def _emit(value):
         if not isinstance(value, str):
-            continue
+            return
         match = pin.match(value)
         if match:
-            yield {
-                "name": match.group(1),
-                "version": match.group(2),
-                "ecosystem": "PyPI",
-            }
-        else:
-            name_match = _re.match(r"^([A-Za-z0-9][A-Za-z0-9_.-]*)", value)
-            if not name_match:
-                continue
-            resolved = _resolve_installed_version(name_match.group(1))
-            if resolved:
-                yield {
-                    "name": name_match.group(1),
-                    "version": resolved,
-                    "ecosystem": "PyPI",
-                }
+            yield {"name": match.group(1), "version": match.group(2), "ecosystem": "PyPI"}
+            return
+        m = name_re.match(value)
+        if not m:
+            return
+        resolved = _resolve_installed_version(m.group(1))
+        if resolved:
+            yield {"name": m.group(1), "version": resolved, "ecosystem": "PyPI"}
+
+    project = data.get("project", {})
+    if isinstance(project, dict):
+        for value in project.get("dependencies", []):
+            yield from _emit(value)
+        optional = project.get("optional-dependencies", {})
+        if isinstance(optional, dict):
+            for group in optional.values():
+                if isinstance(group, list):
+                    for value in group:
+                        yield from _emit(value)
+        for value in project.get("dev-dependencies", []):
+            yield from _emit(value)
+
+    groups = data.get("dependency-groups", {})
+    if isinstance(groups, dict):
+        for group in groups.values():
+            if isinstance(group, list):
+                for value in group:
+                    yield from _emit(value)
+
+    tool = data.get("tool", {})
+    if isinstance(tool, dict):
+        poetry = tool.get("poetry", {})
+        if isinstance(poetry, dict):
+            sections = [
+                poetry.get("dependencies", {}),
+                poetry.get("dev-dependencies", {}),
+            ]
+            pgroups = poetry.get("group", {})
+            if isinstance(pgroups, dict):
+                for group in pgroups.values():
+                    if isinstance(group, dict):
+                        sections.append(group.get("dependencies", {}))
+            import re as _re2
+            _ver_re = _re2.compile(r"(\d+(?:\.\d+)+)")
+            for section in sections:
+                if not isinstance(section, dict):
+                    continue
+                for name, spec in section.items():
+                    if not isinstance(name, str) or name.lower() == "python":
+                        continue
+                    raw = None
+                    if isinstance(spec, str):
+                        raw = spec
+                    elif isinstance(spec, dict):
+                        v = spec.get("version")
+                        if isinstance(v, str):
+                            raw = v
+                    if raw is None:
+                        continue
+                    cleaned = raw.lstrip("^~<>=!* ").strip()
+                    vmatch = _ver_re.match(cleaned)
+                    if vmatch and not any(c in raw for c in "<>*"):
+                        # Exact version like "2.0.0"
+                        yield {"name": name, "version": vmatch.group(1), "ecosystem": "PyPI"}
+                    else:
+                        resolved = _resolve_installed_version(name)
+                        if resolved:
+                            yield {"name": name, "version": resolved, "ecosystem": "PyPI"}
