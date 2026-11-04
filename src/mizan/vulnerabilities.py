@@ -24,9 +24,9 @@ _SEVERITY_ALIASES = {
 
 
 def check_vulnerabilities(name, version, ecosystem):
-    """Query OSV.dev. Returns list of vuln dicts (empty on failure)."""
+    """Query OSV.dev or raise OsvScanError if the check cannot complete."""
     if os.environ.get("MIZAN_DISABLE_OSV"):
-        return []
+        raise OsvScanError("OSV vulnerability checks are disabled")
 
     payload = json.dumps({
         "package": {"name": name, "ecosystem": ecosystem},
@@ -39,12 +39,21 @@ def check_vulnerabilities(name, version, ecosystem):
         headers={"Content-Type": "application/json"},
         method="POST",
     )
+
     try:
         with urllib.request.urlopen(req, timeout=OSV_TIMEOUT) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-    except (urllib.error.URLError, OSError, json.JSONDecodeError):
-        return []
-    return data.get("vulns", [])
+    except (urllib.error.URLError, OSError, json.JSONDecodeError) as exc:
+        raise OsvScanError(f"OSV query failed: {exc}") from exc
+
+    if not isinstance(data, dict):
+        raise OsvScanError("OSV returned an invalid response")
+
+    vulns = data.get("vulns", [])
+    if not isinstance(vulns, list):
+        raise OsvScanError("OSV returned an invalid vulnerabilities list")
+
+    return vulns
 
 
 def parse_requirements_txt(path):
@@ -106,3 +115,5 @@ def severity_of(vuln):
             upper = sev.upper()
             return _SEVERITY_ALIASES.get(upper, upper)
     return "UNKNOWN"
+class OsvScanError(RuntimeError):
+    """Raised when OSV vulnerability scanning cannot be completed."""
