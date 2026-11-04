@@ -2,7 +2,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from mizan.detector import detect_project, _read_python_dependencies
+from unittest.mock import patch
+from mizan.detector import collect_files, detect_project, _read_python_dependencies
 
 
 class DetectorTests(unittest.TestCase):
@@ -257,6 +258,67 @@ class DetectorTests(unittest.TestCase):
             self.assertIn("C/C++", result["languages"])
             self.assertIn("Clang-Tidy", result["suggested_tools"])
             self.assertIn("CTest", result["suggested_tools"])
+
+
+    def test_collect_files_ignores_external_file_symlink(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            root = base / "project"
+            outside = base / "outside"
+            root.mkdir()
+            outside.mkdir()
+
+            (root / "inside.py").write_text("pass", encoding="utf-8")
+            target = outside / "secret.py"
+            target.write_text("secret", encoding="utf-8")
+
+            link = root / "external.py"
+            try:
+                link.symlink_to(target)
+            except (OSError, NotImplementedError) as exc:
+                self.skipTest(f"File symlinks unavailable: {exc}")
+
+            files, truncated = collect_files(root)
+
+            self.assertIn(root / "inside.py", files)
+            self.assertNotIn(link, files)
+            self.assertFalse(truncated)
+
+    def test_collect_files_ignores_external_directory_symlink(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            root = base / "project"
+            outside = base / "outside"
+            root.mkdir()
+            outside.mkdir()
+
+            (root / "inside.py").write_text("pass", encoding="utf-8")
+            (outside / "secret.py").write_text("secret", encoding="utf-8")
+
+            link = root / "external"
+            try:
+                link.symlink_to(outside, target_is_directory=True)
+            except (OSError, NotImplementedError) as exc:
+                self.skipTest(f"Directory symlinks unavailable: {exc}")
+
+            files, truncated = collect_files(root)
+
+            self.assertIn(root / "inside.py", files)
+            self.assertNotIn(link / "secret.py", files)
+            self.assertFalse(truncated)
+
+    def test_collect_files_respects_max_files(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+
+            for name in ("a.py", "b.py", "c.py"):
+                (root / name).write_text("pass", encoding="utf-8")
+
+            with patch("mizan.detector.MAX_FILES", 2):
+                files, truncated = collect_files(root)
+
+            self.assertEqual(len(files), 2)
+            self.assertTrue(truncated)
 
 if __name__ == "__main__":
     unittest.main()
