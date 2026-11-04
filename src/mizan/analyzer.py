@@ -22,7 +22,7 @@ SECRET_PATTERN = re.compile(
     re.VERBOSE
 )
 
-TODO_PATTERN = re.compile(r"\b(TODO|FIXME|XXX)\b")
+TODO_PATTERN = re.compile(r"\b(TODO|FIXME|XXX)\s*:")
 
 
 class PythonSecurityVisitor(ast.NodeVisitor):
