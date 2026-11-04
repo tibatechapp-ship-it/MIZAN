@@ -364,6 +364,8 @@ def _read_package_lock(path):
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return
+    if not isinstance(data, dict):
+        return
     packages = data.get("packages") or {}
     if not isinstance(packages, dict):
         return
@@ -390,6 +392,8 @@ def _read_poetry_lock(path):
         data = tomllib.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return
+    if not isinstance(data, dict):
+        return
     for pkg in data.get("package", []):
         if not isinstance(pkg, dict):
             continue
@@ -408,6 +412,8 @@ def _read_pipfile_lock(path):
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
+        return
+    if not isinstance(data, dict):
         return
     for section in ("default", "develop"):
         for name, entry in (data.get(section) or {}).items():
