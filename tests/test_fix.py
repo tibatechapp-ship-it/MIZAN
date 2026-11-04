@@ -114,6 +114,30 @@ class TestRunnerTests(unittest.TestCase):
             self.assertIsNone(detect_test_command(root))
 
 
+class DetectTestCommandRobustTests(unittest.TestCase):
+    def test_falls_back_to_unittest_when_pytest_missing(self):
+        """When pyproject exists but pytest isn't installed, use unittest."""
+        import unittest.mock as mock
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "pyproject.toml").write_text("[project]\nname='x'\n")
+            (root / "tests").mkdir()
+            with mock.patch("mizan.fix._pytest_available", return_value=False):
+                cmd = detect_test_command(root)
+            self.assertIsNotNone(cmd)
+            self.assertIn("unittest", " ".join(cmd))
+
+    def test_uses_pytest_when_available_and_configured(self):
+        import unittest.mock as mock
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "pyproject.toml").write_text("[project]\nname='x'\n")
+            (root / "conftest.py").write_text("")
+            with mock.patch("mizan.fix._pytest_available", return_value=True):
+                cmd = detect_test_command(root)
+            self.assertIn("pytest", " ".join(cmd))
+
+
 class ApplyFixesTests(unittest.TestCase):
     def test_rolls_back_on_test_failure(self):
         with tempfile.TemporaryDirectory() as temp:
