@@ -2,10 +2,12 @@
 
 import json
 import re
+
 try:
     import tomllib
 except ModuleNotFoundError:
     import tomli as tomllib
+
 from pathlib import Path
 
 MAX_MANIFEST_SIZE = 2 * 1024 * 1024
