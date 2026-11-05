@@ -9,10 +9,13 @@ on:
     - cron: '0 2 * * 1'  # Every Monday at 02:00 UTC
   workflow_dispatch:
 
+# SECURITY FIX: was `contents: write` + `pull-requests: write` at top level.
+# The scan only needs to read code and (via the composite action) upload SARIF.
+# If auto-fix/create-pr are ever enabled, grant `contents: write` to the JOB
+# only — never at top level — and only on trusted (push) context.
 permissions:
-  contents: write
+  contents: read
   security-events: write
-  pull-requests: write
 
 jobs:
   scan:
@@ -20,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.2.2
         with:
           fetch-depth: 0
 

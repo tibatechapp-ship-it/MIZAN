@@ -1,3 +1,3 @@
 """MIZAN software analysis and verification engine."""
 
-__version__ = "0.2.0"
+from mizan._version import __version__  # noqa: F401  (single source of truth)

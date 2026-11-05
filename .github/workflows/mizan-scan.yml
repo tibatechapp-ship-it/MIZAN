@@ -1,37 +1,70 @@
 name: MIZAN Automated Scan
+
+# ============================================================================
+# SECURITY FIX (CI-01 — Critical, remediated 2025-11)
+# ----------------------------------------------------------------------------
+# The previous version used `pull_request_target` with write permissions and
+# repository secrets while executing untrusted fork code — the classic
+# "pwn request" pattern. A malicious fork could have exfiltrated
+# GITGUARDIAN_API_KEY / GMAIL credentials, or pushed attacker-controlled
+# commits with `contents: write`.
+#
+# The safe architecture below splits the work into three jobs:
+#   1. scan       — `pull_request` (NOT _target): fork code runs in a
+#                   read-only, secret-less sandbox. Zero secrets, zero write.
+#   2. report     — comments on the PR using the report ARTIFACT only;
+#                   it never executes fork code, so it is the only job
+#                   allowed to hold a write-scoped token.
+#   3. sarif      — runs on `push` to main only (trusted code), so it can
+#                   safely upload SARIF to the Security tab and send email.
+#
+# Removed entirely (was the attack payload):
+#   - "Remove Detected Secrets" / "AI Auto-Fix" / "Commit and Push Fixes"
+#     executed against PR branches with a write token.
+#
+# All third-party actions are pinned to immutable commit SHAs.
+# ============================================================================
+
 on:
-  pull_request_target:
+  pull_request:
     branches: [ "main" ]
-permissions:
-  contents: write
-  pull-requests: write
-  security-events: write
+  push:
+    branches: [ "main" ]
+
+# Least privilege by default: every job must declare its own permissions.
+permissions: {}
+
 jobs:
-  mizan-security-scan:
+  # ---------------------------------------------------------------------------
+  # Job 1 — Read-only scan. Safe for untrusted PR code:
+  #   * trigger is `pull_request`  -> no secrets are injected
+  #   * `contents: read`           -> cannot modify the repository
+  # ---------------------------------------------------------------------------
+  scan:
+    name: Security Scan (read-only)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.2.2
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v5.6.0
         with:
           python-version: '3.10'
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
 
-      - name: Install Dependencies
+      - name: Install scanners (pinned minor versions)
         run: |
-          pip install bandit semgrep ggshield
-          npm install eslint
+          pip install "bandit==1.8.*" "semgrep==1.*"
+          npm install --no-save eslint
 
       # إنشاء الملفات أولاً لضمان وجودها
       - name: Ensure SARIF files exist
@@ -41,57 +74,104 @@ jobs:
 
       - name: Run MIZAN Scan (SAST)
         id: mizan_scan
-        continue-on-error: true
         run: python run_mizan.py
+        # NOTE: no continue-on-error here — failures must be visible.
+        # run_mizan.py writes mizan_report.md BEFORE exiting non-zero,
+        # so the artifact upload below still works on failure.
 
-      - name: GitGuardian Secret Scan
-        id: ggshield_scan
-        continue-on-error: true
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: mizan-report
+          path: |
+            mizan_report.md
+            bandit.sarif
+            semgrep.sarif
+          retention-days: 7
+          if-no-files-found: warn
+
+  # ---------------------------------------------------------------------------
+  # Job 2 — PR comment. Runs ONLY on pull_request, and ONLY consumes the
+  # artifact produced by job 1. It never executes fork code, so holding
+  # `pull-requests: write` here is the accepted safe pattern.
+  # ---------------------------------------------------------------------------
+  report:
+    name: Comment on PR
+    needs: scan
+    if: ${{ always() && github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Download report artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: mizan-report
+
+      - name: Comment on PR
         env:
-          GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          ggshield secret scan commit-range ${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }} --json --output ggshield-results.json || true
+          gh pr comment "${{ github.event.pull_request.number }}" \
+            --body-file mizan_report.md
 
-      - name: Remove Detected Secrets
-        if: always()
-        run: python src/mizan/secret_remover.py
+  # ---------------------------------------------------------------------------
+  # Job 3 — Trusted-context publication. Runs ONLY on push to main, where
+  # the code is reviewed and trusted. This is the only job that may hold
+  # `security-events: write` and messaging secrets (GitGuardian, Gmail).
+  # ---------------------------------------------------------------------------
+  publish:
+    name: Publish SARIF & Email (trusted main only)
+    needs: scan
+    if: ${{ always() && github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4.2.2
+        with:
+          fetch-depth: 0
 
-      - name: AI Auto-Fix
-        if: always()
-        run: python src/mizan/ai_fixer.py
+      - name: Setup Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v5.6.0
+        with:
+          python-version: '3.10'
 
-      - name: Commit and Push Fixes
-        if: always()
-        run: |
-          git config --global user.name "MIZAN AI Bot"
-          git config --global user.email "mizan-ai@users.noreply.github.com"
-          git add .
-          git commit -m "Security Fix: MIZAN repaired vulnerabilities or redacted secrets [skip ci]" || echo "No changes to commit"
-          git push origin HEAD:${{ github.event.pull_request.head.ref }} || echo "Nothing to push"
+      - name: Download report artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: mizan-report
 
       - name: Upload SARIF to GitHub Security
         if: always()
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
         with:
           sarif_file: |
             bandit.sarif
             semgrep.sarif
 
-      - name: Send Email Report
+      - name: GitGuardian Secret Scan (trusted context)
         if: always()
+        continue-on-error: true
+        env:
+          GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
+        run: |
+          if [ -z "$GITGUARDIAN_API_KEY" ]; then
+            echo "GITGUARDIAN_API_KEY not configured; skipping GitGuardian scan."
+          else
+            pip install "ggshield==1.*"
+            ggshield secret scan repo --json --output ggshield-results.json || true
+            echo "GitGuardian scan completed. Results: ggshield-results.json"
+          fi
+
+      - name: Send Email Report (trusted context)
+        if: always()
+        continue-on-error: true
         env:
           GMAIL_USERNAME: ${{ secrets.GMAIL_USERNAME }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
         run: python src/mizan/email_reporter.py
-
-      - name: Comment on PR
-        if: always()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh pr comment ${{ github.event.pull_request.number }} --body-file mizan_report.md
-
-      - name: Fail if MIZAN found issues
-        if: steps.mizan_scan.outcome == 'failure'
-        run: exit 1

@@ -1,0 +1,19 @@
+# مالكو الكود — مراجعة إلزامية قبل الدمج
+# Code owners — mandatory review before merge
+#
+# القاعدة: أي PR يعدّل هذه المسارات يحتاج موافقة مالك الكود.
+# Rule: any PR touching these paths requires owner approval.
+
+# كل شيء: المشرفون الافتراضيون | everything: default maintainers
+*                       @tibatechapp-ship-it
+
+# مسارات العمل والأمان: أعلى حساسية | workflows & security: highest sensitivity
+/.github/               @tibatechapp-ship-it
+/action/                @tibatechapp-ship-it
+/SECURITY.md            @tibatechapp-ship-it
+/CODEOWNERS             @tibatechapp-ship-it
+
+# بوابة الإصلاح الآمن والسجل | safe-repair gate & ledger
+/src/mizan/repair.py    @tibatechapp-ship-it
+/src/mizan/ledger.py    @tibatechapp-ship-it
+/src/mizan/fix.py       @tibatechapp-ship-it

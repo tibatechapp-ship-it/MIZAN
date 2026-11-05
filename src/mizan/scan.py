@@ -2,23 +2,35 @@
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
 from mizan.detector import collect_files
 from mizan.sarif import build_sarif
-from mizan.vulnerabilities import check_vulnerabilities, parse_dependencies
+from mizan.vulnerabilities import (
+    check_vulnerabilities_batch,
+    parse_dependencies,
+)
 
 
 def scan_repository(root):
-    """Scan `root` and return a dict of findings."""
+    """Scan `root` and return a dict of findings.
+
+    Uses ONE batched OSV round-trip for all dependencies instead of one
+    query per package. Local caching is opt-in via MIZAN_OSV_CACHE=1.
+    """
     files, truncated = collect_files(root)
     dependencies = parse_dependencies(files)
 
+    use_cache = os.environ.get("MIZAN_OSV_CACHE") == "1"
+    checked = check_vulnerabilities_batch(dependencies, use_cache=use_cache)
+
     findings = []
-    for dep in dependencies:
-        vulns = check_vulnerabilities(dep["name"], dep["version"], dep["ecosystem"])
-        for vuln in vulns:
+    for result in checked:
+        for vuln in result.get("vulns", []):
+            dep = {k: v for k, v in result.items()
+                   if k in ("name", "version", "ecosystem", "manifest")}
             findings.append({"dependency": dep, "vuln": vuln})
 
     return {

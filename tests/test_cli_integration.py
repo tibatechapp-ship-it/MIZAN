@@ -1,6 +1,8 @@
 import subprocess
 import tempfile
 import unittest
+
+import mizan
 from pathlib import Path
 
 from mizan import __version__
@@ -40,7 +42,7 @@ class MasterEngineTests(unittest.TestCase):
         result = full_scan_repository(self.root)
 
         self.assertEqual(result["version"], __version__)
-        self.assertEqual(result["version"], "0.2.0")
+        self.assertEqual(result["version"], mizan.__version__)
 
     def test_master_engine_is_read_only(self):
         result = full_scan_repository(self.root)

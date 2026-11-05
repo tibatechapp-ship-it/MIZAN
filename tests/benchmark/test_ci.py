@@ -79,13 +79,19 @@ class PermissionsBenchmark(unittest.TestCase):
         """BM-61: permissions.security-events == write."""
         self.assertEqual(self._perms().get("security-events"), "write")
 
-    def test_62_pull_requests_write(self):
-        """BM-62: permissions.pull-requests == write."""
-        self.assertEqual(self._perms().get("pull-requests"), "write")
+    def test_62_no_pull_requests_write(self):
+        """BM-62: SECURITY — top level must NOT grant pull-requests write.
 
-    def test_63_contents_write(self):
-        """BM-63: permissions.contents == write."""
-        self.assertEqual(self._perms().get("contents"), "write")
+        Rewritten during the CI-01 hardening: the old assertion demanded
+        `pull-requests: write`, which encoded the vulnerability itself.
+        Write access to PRs belongs only to jobs that never execute
+        untrusted fork code (see mizan-scan.yml `report` job).
+        """
+        self.assertNotEqual(self._perms().get("pull-requests"), "write")
+
+    def test_63_contents_read_only(self):
+        """BM-63: SECURITY — top level permissions.contents must be read-only."""
+        self.assertEqual(self._perms().get("contents"), "read")
 
     def test_64_no_admin_permission(self):
         """BM-64: workflow must not request admin permission."""
@@ -104,6 +110,40 @@ class PermissionsBenchmark(unittest.TestCase):
                 if target.startswith("./"):
                     continue
                 self.assertIn("@", target, f"unpinned action: {target}")
+
+    def test_71_no_pwn_request_trigger(self):
+        """BM-71: SECURITY — no workflow may use the pull_request_target trigger.
+
+        pull_request_target + write permissions + secrets + checking out the
+        fork head commit is the classic "pwn request" (CWE-829 style trust
+        violation, see GitHub Security Lab GHSL-2020-046). Any future PR that
+        reintroduces this trigger must fail this test.
+        """
+        for wf in sorted((ROOT / ".github" / "workflows").glob("*.yml")):
+            with open(wf) as f:
+                data = yaml.safe_load(f)
+            triggers = data.get("on") or data.get(True) or {}
+            self.assertNotIn(
+                "pull_request_target",
+                triggers,
+                f"{wf.name} reintroduces the pwn-request trigger",
+            )
+
+    def test_72_scan_workflow_secretless_pr_context(self):
+        """BM-72: SECURITY — the PR scan job in mizan-scan.yml must declare
+        contents: read and must not reference repository secrets.
+        """
+        with open(ROOT / ".github" / "workflows" / "mizan-scan.yml") as f:
+            data = yaml.safe_load(f)
+        scan_job = data["jobs"]["scan"]
+        self.assertEqual(scan_job["permissions"]["contents"], "read")
+        scan_steps = scan_job["steps"]
+        for step in scan_steps:
+            self.assertNotIn(
+                "secrets.",
+                json.dumps(step.get("env", {})),
+                "scan job must not receive repository secrets",
+            )
 
 
 class SarifCIBenchmark(unittest.TestCase):

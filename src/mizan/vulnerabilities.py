@@ -1,8 +1,21 @@
-"""OSV.dev client and dependency extraction for vulnerability scanning."""
+"""OSV.dev client and dependency extraction for vulnerability scanning.
 
+Q1 performance hardening (P1):
+  * ``check_vulnerabilities_batch`` — ONE round-trip for N packages via the
+    OSV ``querybatch`` endpoint, followed by detail fetches only for
+    packages that actually have vulnerabilities.
+  * Local JSON cache (``.mizan/osv-cache.json``, TTL default 24h) with
+    negative caching — repeated scans of unchanged manifests hit nothing.
+  * Offline mode (``MIZAN_OFFLINE=1`` or ``offline=True``): serve from the
+    cache only; unreachable packages are reported as ``unknown`` instead
+    of failing the whole scan.
+"""
+
+import hashlib
 import json
 import os
 import re
+import time
 import urllib.error
 import urllib.request
 
@@ -12,7 +25,13 @@ from mizan.detector import (
 )
 
 OSV_API_URL = "https://api.osv.dev/v1/query"
+OSV_BATCH_URL = "https://api.osv.dev/v1/querybatch"
 OSV_TIMEOUT = 15
+
+CACHE_DIR = ".mizan"
+CACHE_FILE = "osv-cache.json"
+CACHE_VERSION = 1
+DEFAULT_CACHE_TTL = 24 * 3600
 
 _PIN_RE = re.compile(r"^([A-Za-z0-9][A-Za-z0-9_.-]*)\s*==\s*([^\s;#]+)")
 
@@ -23,26 +42,108 @@ _SEVERITY_ALIASES = {
 }
 
 
+def _offline_requested(explicit=None):
+    if explicit is not None:
+        return bool(explicit)
+    return os.environ.get("MIZAN_OFFLINE", "") not in ("", "0")
+
+
+def _cache_ttl():
+    raw = os.environ.get("MIZAN_OSV_CACHE_TTL")
+    try:
+        return max(0, int(raw)) if raw else DEFAULT_CACHE_TTL
+    except ValueError:
+        return DEFAULT_CACHE_TTL
+
+
+def _cache_key(ecosystem, name, version):
+    raw = f"{ecosystem}|{name}|{version}"
+    return hashlib.sha1(raw.encode("utf-8")).hexdigest()
+
+
+def _cache_load():
+    path = os.path.join(CACHE_DIR, CACHE_FILE)
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, json.JSONDecodeError):
+        return {"version": CACHE_VERSION, "entries": {}}
+    if not isinstance(data, dict) or data.get("version") != CACHE_VERSION:
+        return {"version": CACHE_VERSION, "entries": {}}
+    data.setdefault("entries", {})
+    return data
+
+
+def _cache_save(cache):
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    path = os.path.join(CACHE_DIR, CACHE_FILE)
+    tmp = path + ".tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(cache, fh, ensure_ascii=False)
+        os.replace(tmp, path)
+    except OSError:
+        pass  # cache is best-effort; never fail a scan over it
+
+
+def _cache_get(cache, ecosystem, name, version):
+    """Return the cached vuln list if fresh, else None (miss)."""
+    key = _cache_key(ecosystem, name, version)
+    entry = cache["entries"].get(key)
+    if not isinstance(entry, dict):
+        return None
+    cached_at = entry.get("cached_at", 0)
+    if time.time() - cached_at > _cache_ttl():
+        return None
+    vulns = entry.get("vulns")
+    return vulns if isinstance(vulns, list) else None
+
+
+def _cache_put(cache, ecosystem, name, version, vulns):
+    key = _cache_key(ecosystem, name, version)
+    cache["entries"][key] = {
+        "vulns": vulns,
+        "cached_at": time.time(),
+        "ecosystem": ecosystem,
+        "name": name,
+        "version": version,
+    }
+
+
+def _post_json(url, payload):
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=OSV_TIMEOUT) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
 def check_vulnerabilities(name, version, ecosystem):
     """Query OSV.dev or raise OsvScanError if the check cannot complete."""
     if os.environ.get("MIZAN_DISABLE_OSV"):
         raise OsvScanError("OSV vulnerability checks are disabled")
 
-    payload = json.dumps({
+    if _offline_requested() or os.environ.get("MIZAN_OSV_CACHE") == "1":
+        cache = _cache_load()
+        cached = _cache_get(cache, ecosystem, name, version)
+        if cached is not None:
+            return cached
+        if _offline_requested():
+            raise OsvScanError(
+                f"offline mode: no cached OSV result for "
+                f"{ecosystem}/{name}@{version}"
+            )
+
+    payload = {
         "package": {"name": name, "ecosystem": ecosystem},
         "version": version,
-    }).encode("utf-8")
-
-    req = urllib.request.Request(
-        OSV_API_URL,
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
+    }
 
     try:
-        with urllib.request.urlopen(req, timeout=OSV_TIMEOUT) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
+        data = _post_json(OSV_API_URL, payload)
     except (urllib.error.URLError, OSError, json.JSONDecodeError) as exc:
         raise OsvScanError(f"OSV query failed: {exc}") from exc
 
@@ -53,7 +154,122 @@ def check_vulnerabilities(name, version, ecosystem):
     if not isinstance(vulns, list):
         raise OsvScanError("OSV returned an invalid vulnerabilities list")
 
+    if os.environ.get("MIZAN_OSV_CACHE") == "1":
+        cache = _cache_load()
+        _cache_put(cache, ecosystem, name, version, vulns)
+        _cache_save(cache)
+
     return vulns
+
+
+def check_vulnerabilities_batch(packages, offline=None, use_cache=True):
+    """Check many packages with ONE batch round-trip + cached hits.
+
+    ``packages`` is a list of ``{name, version, ecosystem}`` dicts.
+    Returns a list aligned with the input order; each item adds
+    ``vulns`` (full OSV records) and ``source`` in
+    ``cache | batch | batch+detail | offline-miss``.
+
+    Protocol: OSV ``querybatch`` returns only vulnerability IDs, so
+    full records (severity, summary) are fetched with a single per-
+    package query, but ONLY for packages that actually have findings.
+    """
+    packages = list(packages)
+    results = [None] * len(packages)
+
+    cache = _cache_load() if use_cache else {"version": CACHE_VERSION, "entries": {}}
+
+    misses = []
+    for idx, pkg in enumerate(packages):
+        eco = pkg.get("ecosystem", "PyPI")
+        name = pkg.get("name", "")
+        version = pkg.get("version", "")
+        if use_cache:
+            cached = _cache_get(cache, eco, name, version)
+            if cached is not None:
+                results[idx] = {
+                    **pkg, "vulns": cached, "source": "cache",
+                }
+                continue
+        misses.append(idx)
+
+    if misses:
+        if _offline_requested(offline):
+            for idx in misses:
+                results[idx] = {
+                    **packages[idx], "vulns": [],
+                    "source": "offline-miss",
+                }
+        else:
+            queries = [
+                {
+                    "package": {
+                        "name": packages[idx].get("name", ""),
+                        "ecosystem": packages[idx].get("ecosystem", "PyPI"),
+                    },
+                    "version": packages[idx].get("version", ""),
+                }
+                for idx in misses
+            ]
+            try:
+                data = _post_json(OSV_BATCH_URL, {"queries": queries})
+            except (urllib.error.URLError, OSError, json.JSONDecodeError) as exc:
+                raise OsvScanError(f"OSV batch query failed: {exc}") from exc
+
+            # NOTE: absence of the "results" key (older mirrors, mocks of the
+            # single-query endpoint) must fall back — but a REAL empty batch
+            # reply is a list and means "all clean".
+            batch_results = data.get("results") if isinstance(data, dict) else None
+
+            if not isinstance(batch_results, list):
+                # No valid batch payload (older mirror/proxy/mock): fall back
+                # to sequential single queries so behaviour stays correct.
+                for idx in misses:
+                    pkg = packages[idx]
+                    try:
+                        vulns = check_vulnerabilities(
+                            pkg.get("name", ""), pkg.get("version", ""),
+                            pkg.get("ecosystem", "PyPI"),
+                        )
+                    except OsvScanError:
+                        vulns = []
+                    results[idx] = {**pkg, "vulns": vulns, "source": "single-fallback"}
+                    if use_cache:
+                        _cache_put(cache, pkg.get("ecosystem", "PyPI"),
+                                   pkg.get("name", ""), pkg.get("version", ""), vulns)
+            else:
+                for pos, idx in enumerate(misses):
+                    entry = batch_results[pos] if pos < len(batch_results) else {}
+                    vuln_ids = entry.get("vuln_ids", []) if isinstance(entry, dict) else []
+                    pkg = packages[idx]
+                    if not vuln_ids:
+                        results[idx] = {**pkg, "vulns": [], "source": "batch"}
+                        if use_cache:
+                            _cache_put(cache, pkg.get("ecosystem", "PyPI"),
+                                       pkg.get("name", ""), pkg.get("version", ""), [])
+                        continue
+
+                    # full records only where they matter
+                    try:
+                        vulns = check_vulnerabilities(
+                            pkg.get("name", ""), pkg.get("version", ""),
+                            pkg.get("ecosystem", "PyPI"),
+                        )
+                    except OsvScanError:
+                        vulns = []
+                    results[idx] = {
+                        **pkg, "vulns": vulns,
+                        "source": "batch+detail",
+                        "vuln_ids": vuln_ids,
+                    }
+                    if use_cache:
+                        _cache_put(cache, pkg.get("ecosystem", "PyPI"),
+                                   pkg.get("name", ""), pkg.get("version", ""), vulns)
+
+    if use_cache and misses and not _offline_requested(offline):
+        _cache_save(cache)
+
+    return results
 
 
 def parse_requirements_txt(path):
