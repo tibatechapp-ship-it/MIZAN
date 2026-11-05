@@ -19,6 +19,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0 # ضروري لـ GitGuardian لقراءة تاريخ الـ commits
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -32,13 +33,30 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          pip install bandit semgrep
+          pip install bandit semgrep ggshield
           npm install eslint
 
-      - name: Run MIZAN Scan
+      - name: Run MIZAN Scan (SAST)
         id: mizan_scan
         continue-on-error: true
         run: python run_mizan.py
+
+      - name: GitGuardian Secret Scan
+        id: ggshield_scan
+        continue-on-error: true
+        env:
+          GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
+        run: |
+          ggshield secret scan commit-range ${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }} --json --output ggshield-results.json || true
+
+      - name: Process GitGuardian Results
+        if: always()
+        run: |
+          if [ -f ggshield-results.json ]; then
+            echo "✅ GitGuardian scan completed."
+            # عرض النتائج في السجلات
+            cat ggshield-results.json | head -n 20
+          fi
 
       - name: AI Auto-Fix
         run: python src/mizan/ai_fixer.py
