@@ -4,3 +4,7 @@ __pycache__/
 *.log
 package-lock.json
 .eslintcache
+reports/
+backups/
+.mizan/
+*.egg-info/
