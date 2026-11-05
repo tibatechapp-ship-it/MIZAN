@@ -21,25 +21,32 @@ def fix_vulnerabilities():
 
         for result in results:
             rule_id = result.get("ruleId")
-            file_path = result.get("locations", [{}])[0].get("physicalLocation", {}).get("artifactLocation", {}).get("uri")
+            locations = result.get("locations", [])
+            if not locations: continue
             
-            # تركيز الإصلاح على ثغرة استخدام eval الخطير
+            file_path = locations[0].get("physicalLocation", {}).get("artifactLocation", {}).get("uri", "")
+            
+            # إزالة "./" من بداية المسار إذا وجدت
+            if file_path.startswith("./"):
+                file_path = file_path[2:]
+
             if rule_id == "B307" and file_path and os.path.exists(file_path):
                 print(f"🔧 [MIZAN AI] محاولة إصلاح ثغرة {rule_id} في الملف {file_path}...")
                 
                 with open(file_path, "r") as code_file:
                     content = code_file.read()
                 
-                # استخدام تعبير نمطي للبحث عن eval واستبدالها بدالة آمنة
-                # هذا يحاكي ما يفعله الذكاء الاصطناعي عند إعادة كتابة الكود
-                safe_content = re.sub(r'\beval\s*\(', 'import ast; ast.literal_eval(', content)
+                # استبدال eval بـ ast.literal_eval
+                safe_content = re.sub(r'\beval\s*\(', 'ast.literal_eval(', content)
+                
+                # إضافة import ast إذا لم يكن موجوداً
+                if 'ast.literal_eval' in safe_content and 'import ast' not in safe_content:
+                    safe_content = 'import ast\n' + safe_content
                 
                 if content != safe_content:
                     with open(file_path, "w") as code_file:
                         code_file.write(safe_content)
                     print(f"✅ [MIZAN AI] تم إصلاح الملف {file_path} بنجاح!")
-                else:
-                    print(f"⚠️ [MIZAN AI] لم يتم العثور على نمط eval مطابق في {file_path}.")
 
 if __name__ == "__main__":
     fix_vulnerabilities()
