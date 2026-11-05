@@ -19,7 +19,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0 # ضروري لـ GitGuardian لقراءة تاريخ الـ commits
+          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -49,14 +49,10 @@ jobs:
         run: |
           ggshield secret scan commit-range ${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }} --json --output ggshield-results.json || true
 
-      - name: Process GitGuardian Results
+      # الخطوة الجديدة: حذف الأسرار
+      - name: Remove Detected Secrets
         if: always()
-        run: |
-          if [ -f ggshield-results.json ]; then
-            echo "✅ GitGuardian scan completed."
-            # عرض النتائج في السجلات
-            cat ggshield-results.json | head -n 20
-          fi
+        run: python src/mizan/secret_remover.py
 
       - name: AI Auto-Fix
         run: python src/mizan/ai_fixer.py
@@ -66,7 +62,7 @@ jobs:
           git config --global user.name "MIZAN AI Bot"
           git config --global user.email "mizan-ai@users.noreply.github.com"
           git add .
-          git commit -m "🧠 AI Auto-fix: MIZAN repaired security vulnerabilities [skip ci]" || echo "No changes to commit"
+          git commit -m "🛡️ Security Fix: MIZAN detected and redacted exposed secrets [skip ci]" || echo "No changes to commit"
           git push origin HEAD:${{ github.event.pull_request.head.ref }} || echo "Nothing to push"
 
       - name: Ensure SARIF files exist
