@@ -7,6 +7,7 @@ on:
 permissions:
   contents: read
   pull-requests: write
+  security-events: write
 
 jobs:
   mizan-security-scan:
@@ -15,7 +16,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }} # مهم جداً لجلب كود الـ PR
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -29,16 +30,16 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          pip install bandit
+          pip install bandit semgrep
           npm install eslint
 
       - name: Run MIZAN Scan
         id: mizan_scan
-        continue-on-error: true 
+        continue-on-error: true
         run: python run_mizan.py
 
       - name: Comment on PR
-        if: always() 
+        if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
