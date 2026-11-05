@@ -1,10 +1,13 @@
 name: MIZAN Automated Scan
 
 on:
-  push:
-    branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+
+# الصلاحيات المطلوبة لكي يتمكن MIZAN من كتابة تعليق
+permissions:
+  contents: read
+  pull-requests: write
 
 jobs:
   mizan-security-scan:
@@ -29,4 +32,17 @@ jobs:
           npm install eslint
 
       - name: Run MIZAN Scan
+        id: mizan_scan
+        continue-on-error: true # نسمح للخطوة بالفشل لكي نستطيع قراءة التقرير
         run: python run_mizan.py
+
+      - name: Comment on PR
+        if: always() # قم بنشر التعليق دائماً (سواء نجح الفحص أو فشل)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} --body-file mizan_report.md
+
+      - name: Fail if MIZAN found issues
+        if: steps.mizan_scan.outcome == 'failure'
+        run: exit 1
