@@ -49,7 +49,6 @@ jobs:
         run: |
           ggshield secret scan commit-range ${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }} --json --output ggshield-results.json || true
 
-      # الخطوة الجديدة: حذف الأسرار
       - name: Remove Detected Secrets
         if: always()
         run: python src/mizan/secret_remover.py
@@ -65,7 +64,9 @@ jobs:
           git commit -m "🛡️ Security Fix: MIZAN detected and redacted exposed secrets [skip ci]" || echo "No changes to commit"
           git push origin HEAD:${{ github.event.pull_request.head.ref }} || echo "Nothing to push"
 
+      # --- الضمانة لوجود الملفات (حتى لا تفشل خطوة الرفع) ---
       - name: Ensure SARIF files exist
+        if: always()
         run: |
           if [ ! -f bandit.sarif ]; then echo '{"version": "2.1.0", "runs": []}' > bandit.sarif; fi
           if [ ! -f semgrep.sarif ]; then echo '{"version": "2.1.0", "runs": []}' > semgrep.sarif; fi
@@ -77,6 +78,14 @@ jobs:
           sarif_file: |
             bandit.sarif
             semgrep.sarif
+
+      # --- إرسال البريد الإلكتروني ---
+      - name: Send Email Report
+        if: always()
+        env:
+          GMAIL_USERNAME: ${{ secrets.GMAIL_USERNAME }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+        run: python src/mizan/email_reporter.py
 
       - name: Comment on PR
         if: always()
