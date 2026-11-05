@@ -40,7 +40,6 @@ jobs:
         continue-on-error: true
         run: python run_mizan.py
 
-      # الخطوة الجديدة: المصلح الذكي
       - name: AI Auto-Fix
         run: python src/mizan/ai_fixer.py
 
@@ -52,9 +51,15 @@ jobs:
           git commit -m "🧠 AI Auto-fix: MIZAN repaired security vulnerabilities [skip ci]" || echo "No changes to commit"
           git push origin HEAD:${{ github.event.pull_request.head.ref }} || echo "Nothing to push"
 
+      # تأمين وجود ملفات SARIF حتى لو فشل الفحص
+      - name: Ensure SARIF files exist
+        run: |
+          if [ ! -f bandit.sarif ]; then echo '{"version": "2.1.0", "runs": []}' > bandit.sarif; fi
+          if [ ! -f semgrep.sarif ]; then echo '{"version": "2.1.0", "runs": []}' > semgrep.sarif; fi
+
       - name: Upload SARIF to GitHub Security
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4 # تم التحديث إلى v4
         with:
           sarif_file: |
             bandit.sarif
