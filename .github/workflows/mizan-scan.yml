@@ -36,6 +36,13 @@ jobs:
           pip install bandit semgrep ggshield
           npm install eslint
 
+      # 1. إنشاء ملفات SARIF فارغة مبدئياً (لضمان وجودها)
+      - name: Create empty SARIF files
+        run: |
+          echo '{"version": "2.1.0", "runs": []}' > bandit.sarif
+          echo '{"version": "2.1.0", "runs": []}' > semgrep.sarif
+          echo '{"version": "2.1.0", "runs": []}' > mizan_report.md # للطوارئ فقط
+
       - name: Run MIZAN Scan (SAST)
         id: mizan_scan
         continue-on-error: true
@@ -49,27 +56,25 @@ jobs:
         run: |
           ggshield secret scan commit-range ${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }} --json --output ggshield-results.json || true
 
-      # الخطوة الجديدة: حذف الأسرار
       - name: Remove Detected Secrets
         if: always()
         run: python src/mizan/secret_remover.py
 
       - name: AI Auto-Fix
+        if: always()
         run: python src/mizan/ai_fixer.py
 
+      # 2. الالتزام والرفع
       - name: Commit and Push Fixes
+        if: always()
         run: |
           git config --global user.name "MIZAN AI Bot"
           git config --global user.email "mizan-ai@users.noreply.github.com"
           git add .
-          git commit -m "🛡️ Security Fix: MIZAN detected and redacted exposed secrets [skip ci]" || echo "No changes to commit"
+          git commit -m "🛡️ Security Fix: MIZAN repaired vulnerabilities and/or redacted secrets [skip ci]" || echo "No changes to commit"
           git push origin HEAD:${{ github.event.pull_request.head.ref }} || echo "Nothing to push"
 
-      - name: Ensure SARIF files exist
-        run: |
-          if [ ! -f bandit.sarif ]; then echo '{"version": "2.1.0", "runs": []}' > bandit.sarif; fi
-          if [ ! -f semgrep.sarif ]; then echo '{"version": "2.1.0", "runs": []}' > semgrep.sarif; fi
-
+      # 3. رفع SARIF (بعد أن تأكدنا من وجود الملفات)
       - name: Upload SARIF to GitHub Security
         if: always()
         uses: github/codeql-action/upload-sarif@v4
@@ -77,6 +82,14 @@ jobs:
           sarif_file: |
             bandit.sarif
             semgrep.sarif
+
+      # 4. إرسال البريد الإلكتروني (دائماً)
+      - name: Send Email Report
+        if: always()
+        env:
+          GMAIL_USERNAME: ${{ secrets.GMAIL_USERNAME }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+        run: python src/mizan/email_reporter.py
 
       - name: Comment on PR
         if: always()
