@@ -5,4 +5,4 @@ README, website badge) must DERIVE from or agree with this value; the
 consistency is enforced by tests/test_version_consistency.py.
 """
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"

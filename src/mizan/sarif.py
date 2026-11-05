@@ -6,7 +6,7 @@ from mizan._version import __version__ as TOOL_VERSION  # single source of truth
 from mizan.vulnerabilities import severity_of
 
 SARIF_VERSION = "2.1.0"
-TOOL_NAME = "MIZAN"
+TOOL_NAME = "MIZAN Security"
 
 _SEVERITY_TO_LEVEL = {
     "CRITICAL": "error",

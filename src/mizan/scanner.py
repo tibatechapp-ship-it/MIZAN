@@ -3,6 +3,7 @@
 import html
 from pathlib import Path
 
+from ._version import __version__
 from .analyzer import analyze_repository
 from .plugins import PLUGINS
 
@@ -40,8 +41,8 @@ def scan_repository(directory=".", category="all"):
         })
 
     return {
-        "engine": "MIZAN Scanner",
-        "version": "0.1.0",
+        "engine": "MIZAN Security Scanner",
+        "version": __version__,
         "repository": analysis["repository"],
         "mode": "read-only",
         "execution_performed": False,
@@ -74,7 +75,7 @@ def render_html(report):
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MIZAN Scan Report</title>
+<title>MIZAN Security Scan Report</title>
 <style>
 body {{ font-family: sans-serif; margin: 2rem; line-height: 1.5; }}
 table {{ border-collapse: collapse; width: 100%; }}
@@ -83,7 +84,7 @@ th {{ background: #eee; }}
 </style>
 </head>
 <body>
-<h1>MIZAN Scan Report</h1>
+<h1>MIZAN Security Scan Report</h1>
 <p>Repository: {html.escape(str(report['repository']))}</p>
 <p>Mode: read-only</p>
 <p>Files scanned: {report['files_scanned']}</p>
