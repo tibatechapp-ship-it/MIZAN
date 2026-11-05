@@ -37,4 +37,4 @@ mizan ledger "Initial project setup" --actor human
 
 ## Project status
 
-Version 0.3.0 — Verified-fix engine, OSV vulnerability feeds, SARIF output, Ledger accountability log, safe-repair gate.
+Version 0.7.0 — Verified-fix engine, OSV vulnerability feeds, SARIF output, Ledger accountability log, safe-repair gate.
