@@ -61,6 +61,12 @@ jobs:
         with:
           node-version: '22'
 
+      # run_mizan.py imports the installed package (mizan._version via the
+      # src layout) and needs PyYAML — install it from the checked-out code.
+      # SAFE: this job holds no secrets and runs on pull_request (read-only).
+      - name: Install MIZAN (editable, from checked-out code)
+        run: pip install -e .
+
       - name: Install scanners (pinned minor versions)
         run: |
           pip install "bandit==1.8.*" "semgrep==1.*"
@@ -115,6 +121,11 @@ jobs:
         run: |
           # --repo is REQUIRED: this job intentionally has no checkout,
           # so gh cannot infer the repository from a git remote.
+          # Fallback: if the scan crashed before writing a report, still
+          # comment so the PR is never left silently unreported.
+          if [ ! -f mizan_report.md ]; then
+            echo "⚠️ **MIZAN**: تعذّر إنتاج التقرير — راجع سجلات الـ run." > mizan_report.md
+          fi
           gh pr comment "${{ github.event.pull_request.number }}" \
             --repo "${{ github.repository }}" \
             --body-file mizan_report.md
