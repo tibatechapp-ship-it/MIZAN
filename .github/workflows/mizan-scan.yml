@@ -1,10 +1,9 @@
 name: MIZAN Automated Scan
 
 on:
-  pull_request:
+  pull_request_target:
     branches: [ "main" ]
 
-# الصلاحيات المطلوبة لكي يتمكن MIZAN من كتابة تعليق
 permissions:
   contents: read
   pull-requests: write
@@ -15,6 +14,8 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }} # مهم جداً لجلب كود الـ PR
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -33,11 +34,11 @@ jobs:
 
       - name: Run MIZAN Scan
         id: mizan_scan
-        continue-on-error: true # نسمح للخطوة بالفشل لكي نستطيع قراءة التقرير
+        continue-on-error: true 
         run: python run_mizan.py
 
       - name: Comment on PR
-        if: always() # قم بنشر التعليق دائماً (سواء نجح الفحص أو فشل)
+        if: always() 
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
