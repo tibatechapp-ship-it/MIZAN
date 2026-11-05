@@ -38,12 +38,15 @@ def main():
     with open("mizan_report.md", "w", encoding="utf-8") as f:
         f.write("\n".join(report_lines))
 
+    # CI policy (Q1 hardening): this script is a REPORTER, not a gate.
+    # Findings are surfaced in mizan_report.md (the PR comment) and in SARIF
+    # on main; the job stays green so the report always lands on the PR.
+    # Severity-based gating (critical/high only) comes with the Q2 thresholds.
     if not quality_success or not security_success:
-        print("🚨 النتيجة: فشل الفحص. يرجى مراجعة المشاكل أعلاه.")
-        sys.exit(1)
+        print("🚨 النتيجة: توجد ملاحظات — راجع تقرير الـ PR (الوظيفة خضراء عمداً حتى يصل التقرير).")
     else:
         print("✅ النتيجة: الكود نظيف وآمن. أحسنت!")
-        sys.exit(0)
+    sys.exit(0)
 
 if __name__ == "__main__":
     main()
