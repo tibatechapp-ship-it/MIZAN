@@ -56,4 +56,4 @@ mizan ledger "Initial project setup" --actor human
 
 ## Project status
 
-Version 0.8.0 — Severity gate, baseline delta scanning, parallel full-scan engine, verified-fix engine, OSV vulnerability feeds, SARIF output, Ledger accountability log, safe-repair gate.
+Version 0.8.1 — Severity gate (bare `--gate` fix), baseline delta scanning, parallel full-scan engine, verified-fix engine, OSV vulnerability feeds, SARIF output, Ledger accountability log, safe-repair gate.
