@@ -4,18 +4,21 @@ import re
 from urllib.parse import unquote
 
 def normalize_path(path):
-    """تحويل أي مسار (URI أو مطلق) إلى مسار نسبي من جذر المشروع."""
+    """تحويل أي مسار (URI أو مطلق) إلى مسار نسبي من جذر المشروع الحالي."""
     if path.startswith("file://"):
         path = path[7:]
+    
     if os.path.isabs(path):
-        parts = path.split(os.sep)
+        # حساب المسار النسبي من المجلد الحالي (جذر المستودع)
         try:
-            idx = parts.index("MIZAN")
-            path = os.sep.join(parts[idx+1:])
+            path = os.path.relpath(path, os.getcwd())
         except ValueError:
-            path = os.sep.join(parts[-2:])
+            # في حال كان في قرص مختلف (Windows)
+            path = os.path.basename(path)
+            
     if path.startswith("./"):
         path = path[2:]
+        
     return unquote(path)
 
 def fix_vulnerabilities():
