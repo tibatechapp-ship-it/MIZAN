@@ -8,3 +8,7 @@ reports/
 backups/
 .mizan/
 *.egg-info/
+*.sarif
+mizan_report.md
+ggshield-results.json
+bandit.sarif
