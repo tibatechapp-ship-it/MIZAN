@@ -4,10 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mizan-engine"
-version = "0.2.0"
 description = "AI-powered software analysis and verification engine"
 readme = "README.md"
 requires-python = ">=3.10"
+# SEC-06: version is derived from src/mizan/_version.py — single source of truth.
+dynamic = ["version"]
 dependencies = [
     "PyYAML>=6.0",
     "tomli>=2.0; python_version < '3.11'",
@@ -15,11 +16,20 @@ dependencies = [
 license = "MIT"
 authors = [{name = "MIZAN Contributors"}]
 
+[tool.setuptools.dynamic]
+version = {attr = "mizan._version.__version__"}
+
 [project.scripts]
 mizan = "mizan.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+# Bait traps (tests/fixtures/bait/*.py) are inert demo files that read from
+# stdin — they must NEVER be collected by pytest or unittest.
+testpaths = ["tests"]
+norecursedirs = ["fixtures", ".*", "build", "dist", "node_modules", "venv"]
 
 [project.optional-dependencies]
 # Self-test extra used to demonstrate MIZAN's ability to scan and fix

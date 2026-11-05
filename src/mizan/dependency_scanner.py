@@ -10,6 +10,8 @@ except ModuleNotFoundError:
 
 from pathlib import Path
 
+from mizan._version import __version__
+
 MAX_MANIFEST_SIZE = 2 * 1024 * 1024
 
 MANIFESTS = {
@@ -204,7 +206,7 @@ def scan_dependencies(directory="."):
 
     return {
         "engine": "MIZAN Dependency Scanner",
-        "version": "0.2.0",
+        "version": __version__,
         "repository": str(root),
         "manifests_scanned": len(manifests),
         "manifests": manifests,
