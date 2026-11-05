@@ -38,6 +38,14 @@ jobs:
         continue-on-error: true
         run: python run_mizan.py
 
+      - name: Upload SARIF to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: |
+            bandit.sarif
+            semgrep.sarif
+
       - name: Comment on PR
         if: always()
         env:
