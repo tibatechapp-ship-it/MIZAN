@@ -1,0 +1,6 @@
+id: dangerous-eval
+language: python
+rule:
+  pattern: eval($ARG)
+message: "استخدام eval() خطير"
+severity: error

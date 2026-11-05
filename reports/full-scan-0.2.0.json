@@ -1,0 +1,263 @@
+{
+  "engine": "MIZAN Master Engine",
+  "version": "0.1.0",
+  "repository": "/data/data/com.termux/files/home/MIZAN",
+  "mode": "read-only",
+  "execution_performed": false,
+  "analysis": {
+    "engine": "MIZAN AST Analyzer",
+    "version": "0.2.0",
+    "repository": "/data/data/com.termux/files/home/MIZAN",
+    "files_scanned": 16,
+    "findings_count": 2,
+    "findings": [
+      {
+        "file": "src/mizan/analyzer.py",
+        "line": 25,
+        "rule": "todo",
+        "severity": "info",
+        "message": "Unresolved development marker."
+      },
+      {
+        "file": "tests/test_scanner.py",
+        "line": 14,
+        "rule": "todo",
+        "severity": "info",
+        "message": "Unresolved development marker."
+      }
+    ],
+    "mode": "read-only",
+    "execution_performed": false
+  },
+  "detection": {
+    "engine": "MIZAN Smart Detector",
+    "version": "0.1.0",
+    "repository": "/data/data/com.termux/files/home/MIZAN",
+    "files_discovered": 39,
+    "scan_limit_reached": false,
+    "languages": [
+      "Python"
+    ],
+    "frameworks": [],
+    "suggested_tools": [
+      "Bandit",
+      "Mypy",
+      "Pytest",
+      "Ruff"
+    ],
+    "execution_performed": false,
+    "mode": "read-only"
+  },
+  "scanner": {
+    "engine": "MIZAN Scanner",
+    "version": "0.1.0",
+    "repository": "/data/data/com.termux/files/home/MIZAN",
+    "mode": "read-only",
+    "execution_performed": false,
+    "files_scanned": 16,
+    "plugins": [
+      {
+        "name": "security",
+        "category": "security",
+        "version": "0.1.0",
+        "findings_count": 0,
+        "findings": []
+      },
+      {
+        "name": "quality",
+        "category": "quality",
+        "version": "0.1.0",
+        "findings_count": 2,
+        "findings": [
+          {
+            "file": "src/mizan/analyzer.py",
+            "line": 25,
+            "rule": "todo",
+            "severity": "info",
+            "message": "Unresolved development marker."
+          },
+          {
+            "file": "tests/test_scanner.py",
+            "line": 14,
+            "rule": "todo",
+            "severity": "info",
+            "message": "Unresolved development marker."
+          }
+        ]
+      }
+    ],
+    "findings_count": 2,
+    "findings": [
+      {
+        "file": "src/mizan/analyzer.py",
+        "line": 25,
+        "rule": "todo",
+        "severity": "info",
+        "message": "Unresolved development marker."
+      },
+      {
+        "file": "tests/test_scanner.py",
+        "line": 14,
+        "rule": "todo",
+        "severity": "info",
+        "message": "Unresolved development marker."
+      }
+    ]
+  },
+  "git": {
+    "engine": "MIZAN Git Scanner",
+    "repository": "/data/data/com.termux/files/home/MIZAN",
+    "branch": "main",
+    "commit": "1cb58b470f65ec38b5c1aaf373d6d989911823c8",
+    "working_tree_clean": false,
+    "changed_files_count": 18,
+    "changed_files": [
+      "M pyproject.toml",
+      " M src/mizan/__init__.py",
+      " M src/mizan/analyzer.py",
+      " M src/mizan/cli.py",
+      "?? backups/",
+      "?? docs/FREE_AND_OPEN_SOURCE_POLICY.md",
+      "?? reports/",
+      "?? src/mizan/ci_scanner.py",
+      "?? src/mizan/dependency_scanner.py",
+      "?? src/mizan/detector.py",
+      "?? src/mizan/git_scanner.py",
+      "?? src/mizan/plugins.py",
+      "?? src/mizan/risk_scanner.py",
+      "?? src/mizan/scanner.py",
+      "?? tests/test_ci_scanner.py",
+      "?? tests/test_detector.py",
+      "?? tests/test_scanner.py",
+      "?? website/"
+    ],
+    "remotes": [],
+    "recent_commits": [
+      {
+        "hash": "1cb58b4",
+        "message": "Initial MIZAN foundation v0.1.0",
+        "date": "2026-11-04T04:34:18+03:00"
+      }
+    ],
+    "mode": "read-only",
+    "execution_performed": false
+  },
+  "ci": {
+    "engine": "MIZAN CI/CD Scanner",
+    "version": "0.1.0",
+    "repository": "/data/data/com.termux/files/home/MIZAN",
+    "files_scanned": 0,
+    "findings_count": 0,
+    "findings": [],
+    "mode": "read-only",
+    "execution_performed": false
+  },
+  "dependencies": {
+    "engine": "MIZAN Dependency Scanner",
+    "version": "0.2.0",
+    "repository": "/data/data/com.termux/files/home/MIZAN",
+    "manifests_scanned": 1,
+    "manifests": [
+      "pyproject.toml"
+    ],
+    "dependencies_count": 1,
+    "dependencies": [
+      {
+        "name": "PyYAML",
+        "constraint": "PyYAML>=6.0",
+        "source": "pyproject.toml"
+      }
+    ],
+    "findings_count": 0,
+    "findings": [],
+    "vulnerability_database_checked": false,
+    "mode": "read-only",
+    "execution_performed": false
+  },
+  "change_risk": {
+    "engine": "MIZAN Change Risk Analyzer",
+    "version": "0.2.0",
+    "repository": "/data/data/com.termux/files/home/MIZAN",
+    "changed_files_count": 18,
+    "changed_files": [
+      {
+        "status": "M ",
+        "file": "yproject.toml"
+      },
+      {
+        "status": " M",
+        "file": "src/mizan/__init__.py"
+      },
+      {
+        "status": " M",
+        "file": "src/mizan/analyzer.py"
+      },
+      {
+        "status": " M",
+        "file": "src/mizan/cli.py"
+      },
+      {
+        "status": "??",
+        "file": "backups/"
+      },
+      {
+        "status": "??",
+        "file": "docs/FREE_AND_OPEN_SOURCE_POLICY.md"
+      },
+      {
+        "status": "??",
+        "file": "reports/"
+      },
+      {
+        "status": "??",
+        "file": "src/mizan/ci_scanner.py"
+      },
+      {
+        "status": "??",
+        "file": "src/mizan/dependency_scanner.py"
+      },
+      {
+        "status": "??",
+        "file": "src/mizan/detector.py"
+      },
+      {
+        "status": "??",
+        "file": "src/mizan/git_scanner.py"
+      },
+      {
+        "status": "??",
+        "file": "src/mizan/plugins.py"
+      },
+      {
+        "status": "??",
+        "file": "src/mizan/risk_scanner.py"
+      },
+      {
+        "status": "??",
+        "file": "src/mizan/scanner.py"
+      },
+      {
+        "status": "??",
+        "file": "tests/test_ci_scanner.py"
+      },
+      {
+        "status": "??",
+        "file": "tests/test_detector.py"
+      },
+      {
+        "status": "??",
+        "file": "tests/test_scanner.py"
+      },
+      {
+        "status": "??",
+        "file": "website/"
+      }
+    ],
+    "risk_score": 36,
+    "risk_level": "medium",
+    "findings_count": 0,
+    "findings": [],
+    "mode": "read-only",
+    "execution_performed": false
+  }
+}

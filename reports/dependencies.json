@@ -1,0 +1,22 @@
+{
+  "engine": "MIZAN Dependency Scanner",
+  "version": "0.2.0",
+  "repository": "/data/data/com.termux/files/home/MIZAN",
+  "manifests_scanned": 1,
+  "manifests": [
+    "pyproject.toml"
+  ],
+  "dependencies_count": 1,
+  "dependencies": [
+    {
+      "name": "PyYAML",
+      "constraint": "PyYAML>=6.0",
+      "source": "pyproject.toml"
+    }
+  ],
+  "findings_count": 0,
+  "findings": [],
+  "vulnerability_database_checked": false,
+  "mode": "read-only",
+  "execution_performed": false
+}

@@ -1,0 +1,1 @@
+export default [ { ignores: ["node_modules/**", ".venv/**"] }, { rules: { "no-unused-vars": "warn", "no-undef": "error" } } ];
