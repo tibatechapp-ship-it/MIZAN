@@ -127,11 +127,13 @@ def main():
     scan_cmd.add_argument("--output", default=None)
     scan_cmd.add_argument(
         "--gate",
+        nargs="?",
+        const="critical,high",
         default=None,
         metavar="SEVERITIES",
         help=(
             "Fail (exit 1) when findings at these normalized severities "
-            "exist, e.g. 'critical,high' (default when flag is given)"
+            "exist; bare --gate defaults to 'critical,high'"
         ),
     )
     scan_cmd.add_argument(

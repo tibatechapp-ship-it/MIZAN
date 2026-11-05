@@ -214,6 +214,30 @@ class TestGateCLI(unittest.TestCase):
         finally:
             sys.argv = old_argv
 
+    def test_bm_119_bare_gate_flag_defaults_to_critical_high(self):
+        """BM-119: bare `--gate` (no value) works and defaults to
+        critical,high — the documented README usage must not crash."""
+        from mizan.cli import main as cli_main
+
+        dirty = tempfile.mkdtemp()
+        with open(os.path.join(dirty, "app.py"), "w", encoding="utf-8") as fh:
+            fh.write('def f():\n    return eval("1+1")\n')
+
+        old_argv = sys.argv
+        try:
+            sys.argv = ["mizan", "scan", dirty, "--gate", "--format", "json"]
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                code = cli_main()
+            self.assertEqual(code, 1)
+            payload = json.loads(out.getvalue())
+            self.assertEqual(
+                payload["gate"]["blocking_severities"], ["critical", "high"]
+            )
+            self.assertEqual(payload["gate"]["decision"], "fail")
+        finally:
+            sys.argv = old_argv
+
 
 if __name__ == "__main__":
     unittest.main()
