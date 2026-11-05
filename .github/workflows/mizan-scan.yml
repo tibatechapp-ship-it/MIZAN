@@ -5,7 +5,7 @@ on:
     branches: [ "main" ]
 
 permissions:
-  contents: write # ضروري للسماح لـ MIZAN برفع التعديلات
+  contents: write
   pull-requests: write
   security-events: write
 
@@ -35,20 +35,22 @@ jobs:
           pip install bandit semgrep
           npm install eslint
 
-      # الخطوة الجديدة: الإصلاح التلقائي
-      - name: Auto-Fix with ESLint
-        run: |
-          npx eslint . --fix || true
-          git config --global user.name "MIZAN Bot"
-          git config --global user.email "mizan-bot@users.noreply.github.com"
-          git add .
-          git commit -m "🤖 Auto-fix: MIZAN applied automatic code fixes [skip ci]" || echo "No changes to commit"
-          git push origin HEAD:${{ github.event.pull_request.head.ref }} || echo "Nothing to push"
-
       - name: Run MIZAN Scan
         id: mizan_scan
         continue-on-error: true
         run: python run_mizan.py
+
+      # الخطوة الجديدة: المصلح الذكي
+      - name: AI Auto-Fix
+        run: python src/mizan/ai_fixer.py
+
+      - name: Commit and Push Fixes
+        run: |
+          git config --global user.name "MIZAN AI Bot"
+          git config --global user.email "mizan-ai@users.noreply.github.com"
+          git add .
+          git commit -m "🧠 AI Auto-fix: MIZAN repaired security vulnerabilities [skip ci]" || echo "No changes to commit"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }} || echo "Nothing to push"
 
       - name: Upload SARIF to GitHub Security
         if: always()
