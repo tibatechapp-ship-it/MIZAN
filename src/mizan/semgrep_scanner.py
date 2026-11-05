@@ -11,29 +11,22 @@ class SemgrepScanner:
 
     def _run_with_bandit(self):
         try:
-            # -q لإخفاء شريط التقدم، -x لاستبعاد المجلدات غير المرغوبة
+            # أضفنا استبعاداً لملفات MIZAN نفسها حتى لا تفحص نفسها
             result = subprocess.run(
-                ["bandit", "-r", self.target_dir, "-f", "json", "-q", "-x", ".venv,venv,node_modules"],
+                ["bandit", "-r", self.target_dir, "-f", "sarif", "-o", "bandit_results.sarif", "-q", 
+                 "-x", ".venv,venv,node_modules,run_mizan.py,src/mizan/"],
                 capture_output=True, text=True
             )
             
-            if result.stderr and not result.stdout:
-                print(f"❌ [MIZAN] خطأ في Bandit:\n{result.stderr}")
-                return False, []
-
-            if result.stdout:
-                try:
-                    data = json.loads(result.stdout)
-                    results = data.get("results", [])
-                    
-                    if len(results) > 0:
-                        print(f"🚨 [MIZAN] اكتشف Bandit {len(results)} مشاكل/ثغرات في كود Python!")
-                        return False, results
-                except json.JSONDecodeError:
-                    print(f"❌ [MIZAN] فشل في قراءة نتائج Bandit. المخرجات الخام:\n{result.stdout[:200]}")
-                    return False, []
-                    
-            print("✅ [MIZAN] لم يكتشف Bandit أي مشاكل في Python.")
+            print("✅ [MIZAN] تم الانتهاء من فحص Bandit وتوليد تقرير SARIF.")
+            
+            with open("bandit_results.sarif", "r") as f:
+                sarif_data = json.load(f)
+                runs = sarif_data.get("runs", [])
+                if runs and len(runs[0].get("results", [])) > 0:
+                    print(f"🚨 [MIZAN] اكتشف Bandit ثغرات! (يرجى مراجعة تبويب الأمان في GitHub)")
+                    return False, runs[0]["results"]
+            
             return True, []
 
         except FileNotFoundError:
