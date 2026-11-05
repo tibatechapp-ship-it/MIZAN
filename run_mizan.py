@@ -5,7 +5,7 @@ import os
 
 def main():
     print("========================================")
-    print("       ⚖️  نظام MIZAN للتحليل الشامل       ")
+    print("       ⚖️  نظام MIZAN Security للتحليل الشامل       ")
     print("========================================\n")
 
     report_lines = ["## ⚖️ تقرير MIZAN الآلي\n"]
@@ -41,7 +41,10 @@ def main():
     # CI policy (Q1 hardening): this script is a REPORTER, not a gate.
     # Findings are surfaced in mizan_report.md (the PR comment) and in SARIF
     # on main; the job stays green so the report always lands on the PR.
-    # Severity-based gating (critical/high only) comes with the Q2 thresholds.
+    # Q2 delivered the opt-in severity gate + baseline delta scanning:
+    #   mizan scan . --gate critical,high --baseline .mizan/baseline.json
+    # Enabling it in CI is a deliberate product decision (threshold policy),
+    # kept out of this reporter on purpose.
     if not quality_success or not security_success:
         print("🚨 النتيجة: توجد ملاحظات — راجع تقرير الـ PR (الوظيفة خضراء عمداً حتى يصل التقرير).")
     else:

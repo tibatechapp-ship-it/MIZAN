@@ -8,8 +8,8 @@
 
 | الإصدار | مدعوم |
 |---|---|
-| 0.3.x | ✅ نعم |
-| < 0.3.0 | ❌ لا — يُنصح بالترقية فوراً (إصلاح أمني حرج في 0.3.0) |
+| 0.7.x+ | ✅ نعم |
+| < 0.7.0 | ❌ لا — يُنصح بالترقية فوراً (إصلاح أمني حرج في 0.3.0، وتقوية إضافية في 0.7.0) |
 
 ## كيف تُبلّغ عن ثغرة؟ | Reporting a Vulnerability
 
@@ -53,8 +53,8 @@
 
 | Version | Supported |
 |---|---|
-| 0.3.x | ✅ Yes |
-| < 0.3.0 | ❌ No — upgrade immediately (0.3.0 ships a critical CI fix) |
+| 0.7.x+ | ✅ Yes |
+| < 0.7.0 | ❌ No — upgrade immediately (0.3.0 ships a critical CI fix, 0.7.0 completes the hardening wave) |
 
 ## Reporting
 

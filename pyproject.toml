@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mizan-engine"
-description = "AI-powered software analysis and verification engine"
+description = "MIZAN Security — one lightweight, fast engine for code, secrets, dependencies and CI hardening"
 readme = "README.md"
 requires-python = ">=3.10"
 # SEC-06: version is derived from src/mizan/_version.py — single source of truth.
@@ -14,7 +14,7 @@ dependencies = [
     "tomli>=2.0; python_version < '3.11'",
 ]
 license = "MIT"
-authors = [{name = "MIZAN Contributors"}]
+authors = [{name = "MIZAN Security Contributors"}]
 
 [tool.setuptools.dynamic]
 version = {attr = "mizan._version.__version__"}

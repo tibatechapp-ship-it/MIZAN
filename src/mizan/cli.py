@@ -1,7 +1,9 @@
-"""MIZAN command-line interface."""
+"""MIZAN Security command-line interface."""
 
 import argparse
 import json
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from . import __version__
@@ -17,21 +19,47 @@ from .risk_scanner import scan_change_risk
 from .dependency_scanner import scan_dependencies
 
 
-def full_scan_repository(directory="."):
-    """Run all MIZAN read-only repository scanners."""
+def full_scan_repository(directory=".", jobs=4):
+    """Run all MIZAN Security read-only repository scanners.
+
+    Q2 speed wave: the scanners are independent read-only passes, so by
+    default (``jobs >= 2``) they run concurrently in a thread pool —
+    wall time becomes the SLOWEST pass instead of the SUM of all passes.
+    ``jobs=1`` restores the strictly sequential execution.
+    """
+    runners = {
+        "analysis": analyze_repository,
+        "detection": detect_project,
+        "scanner": scan_repository,
+        "git": scan_git_repository,
+        "ci": scan_ci_repository,
+        "dependencies": scan_dependencies,
+        "change_risk": scan_change_risk,
+    }
+
+    started = time.perf_counter()
+    if jobs and jobs > 1:
+        with ThreadPoolExecutor(max_workers=jobs) as pool:
+            futures = {
+                name: pool.submit(runner, directory)
+                for name, runner in runners.items()
+            }
+            results = {
+                name: future.result()
+                for name, future in futures.items()
+            }
+    else:
+        results = {name: runner(directory) for name, runner in runners.items()}
+    wall_seconds = round(time.perf_counter() - started, 3)
+
     return {
-        "engine": "MIZAN Master Engine",
+        "engine": "MIZAN Security Master Engine",
         "version": __version__,
         "repository": str(Path(directory).expanduser().resolve()),
         "mode": "read-only",
         "execution_performed": False,
-        "analysis": analyze_repository(directory),
-        "detection": detect_project(directory),
-        "scanner": scan_repository(directory),
-        "git": scan_git_repository(directory),
-        "ci": scan_ci_repository(directory),
-        "dependencies": scan_dependencies(directory),
-        "change_risk": scan_change_risk(directory),
+        "execution": {"jobs": jobs or 1, "wall_seconds": wall_seconds},
+        **results,
     }
 
 
@@ -48,7 +76,10 @@ def save_or_print(content, output=None):
 def main():
     parser = argparse.ArgumentParser(
         prog="mizan",
-        description="MIZAN Software Analysis and Verification Engine"
+        description=(
+            "MIZAN Security — one lightweight, fast engine for code, "
+            "secrets, dependencies and CI hardening"
+        ),
     )
 
     commands = parser.add_subparsers(dest="command", required=True)
@@ -94,6 +125,24 @@ def main():
         default="json"
     )
     scan_cmd.add_argument("--output", default=None)
+    scan_cmd.add_argument(
+        "--gate",
+        default=None,
+        metavar="SEVERITIES",
+        help=(
+            "Fail (exit 1) when findings at these normalized severities "
+            "exist, e.g. 'critical,high' (default when flag is given)"
+        ),
+    )
+    scan_cmd.add_argument(
+        "--baseline",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Only gate on findings whose fingerprint is NOT in this "
+            "baseline (delta scanning — kills alert fatigue)"
+        ),
+    )
 
     git_cmd = commands.add_parser(
         "git-scan",
@@ -114,6 +163,13 @@ def main():
     )
     full_cmd.add_argument("path", nargs="?", default=".")
     full_cmd.add_argument("--output", default=None)
+    full_cmd.add_argument(
+        "--jobs",
+        type=int,
+        default=4,
+        metavar="N",
+        help="Parallel scanners (default 4, use 1 for sequential)",
+    )
 
     dependency_cmd = commands.add_parser(
         "dependency-scan",
@@ -180,6 +236,24 @@ def main():
     fix_cmd.add_argument("--no-validate", action="store_true")
     fix_cmd.add_argument("--format", choices=["json", "text"], default="text")
 
+    baseline_cmd = commands.add_parser(
+        "baseline",
+        help="Save current findings as a gate baseline (delta scanning)",
+    )
+    baseline_cmd.add_argument("path", nargs="?", default=".")
+    baseline_cmd.add_argument(
+        "--save",
+        default=".mizan/baseline.json",
+        metavar="PATH",
+    )
+    baseline_cmd.add_argument("--note", default="")
+    baseline_cmd.add_argument(
+        "--jobs",
+        type=int,
+        default=4,
+        metavar="N",
+    )
+
     args = parser.parse_args()
 
     try:
@@ -213,6 +287,17 @@ def main():
                 args.path,
                 category=args.category
             )
+            if args.gate is not None:
+                from .gate import apply_gate, DEFAULT_BLOCKING
+                severities = [
+                    s.strip().lower()
+                    for s in args.gate.split(",") if s.strip()
+                ] or list(DEFAULT_BLOCKING)
+                result["gate"] = apply_gate(
+                    result.get("findings", []),
+                    blocking=severities,
+                    baseline_path=args.baseline,
+                )
             if args.format == "html":
                 rendered = render_html(result)
             else:
@@ -220,6 +305,8 @@ def main():
                     result, indent=2, ensure_ascii=False
                 )
             save_or_print(rendered, args.output)
+            if "gate" in result:
+                return 1 if result["gate"]["decision"] == "fail" else 0
 
         elif args.command == "git-scan":
             result = scan_git_repository(args.path)
@@ -235,11 +322,24 @@ def main():
             save_or_print(rendered, args.output)
 
         elif args.command == "full-scan":
-            result = full_scan_repository(args.path)
+            result = full_scan_repository(args.path, jobs=args.jobs)
             rendered = json.dumps(
                 result, indent=2, ensure_ascii=False
             )
             save_or_print(rendered, args.output)
+
+        elif args.command == "baseline":
+            from .gate import collect_findings, save_baseline
+            full = full_scan_repository(args.path, jobs=args.jobs)
+            findings = collect_findings(full)
+            doc = save_baseline(findings, path=args.save, note=args.note)
+            print(json.dumps({
+                "tool": "MIZAN Security",
+                "baseline": doc["schema"],
+                "saved_to": str(Path(args.save)),
+                "fingerprints": doc["count"],
+                "note": doc["note"],
+            }, indent=2, ensure_ascii=False))
 
         elif args.command == "dependency-scan":
             result = scan_dependencies(args.path)
@@ -329,7 +429,7 @@ def main():
             return fix_main(argv)
 
     except (ValueError, OSError) as exc:
-        parser.exit(1, f"MIZAN error: {exc}\n")
+        parser.exit(1, f"MIZAN Security error: {exc}\n")
 
 
 if __name__ == "__main__":

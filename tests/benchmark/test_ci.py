@@ -169,9 +169,11 @@ class SarifCIBenchmark(unittest.TestCase):
         self.assertIn("results", sarif["runs"][0])
 
     def test_68_sarif_tool_name_mizan(self):
-        """BM-68: SARIF tool name = MIZAN."""
+        """BM-68: SARIF tool name = MIZAN Security (rebrand, Q2)."""
         sarif = self._build(VULNS)
-        self.assertEqual(sarif["runs"][0]["tool"]["driver"]["name"], "MIZAN")
+        self.assertEqual(
+            sarif["runs"][0]["tool"]["driver"]["name"], "MIZAN Security"
+        )
 
     def test_69_sarif_level_from_cvss(self):
         """BM-69: CRITICAL -> error, MEDIUM -> warning, LOW -> note."""
