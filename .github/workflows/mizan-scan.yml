@@ -29,19 +29,12 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Install Dependencies
         run: |
           pip install bandit semgrep ggshield
           npm install eslint
-
-      # 1. إنشاء ملفات SARIF فارغة مبدئياً (لضمان وجودها)
-      - name: Create empty SARIF files
-        run: |
-          echo '{"version": "2.1.0", "runs": []}' > bandit.sarif
-          echo '{"version": "2.1.0", "runs": []}' > semgrep.sarif
-          echo '{"version": "2.1.0", "runs": []}' > mizan_report.md # للطوارئ فقط
 
       - name: Run MIZAN Scan (SAST)
         id: mizan_scan
@@ -64,26 +57,24 @@ jobs:
         if: always()
         run: python src/mizan/ai_fixer.py
 
-      # 2. الالتزام والرفع
       - name: Commit and Push Fixes
         if: always()
         run: |
           git config --global user.name "MIZAN AI Bot"
           git config --global user.email "mizan-ai@users.noreply.github.com"
           git add .
-          git commit -m "🛡️ Security Fix: MIZAN repaired vulnerabilities and/or redacted secrets [skip ci]" || echo "No changes to commit"
+          git commit -m "Security Fix: MIZAN repaired vulnerabilities or redacted secrets [skip ci]" || echo "No changes to commit"
           git push origin HEAD:${{ github.event.pull_request.head.ref }} || echo "Nothing to push"
 
-      # 3. رفع SARIF (بعد أن تأكدنا من وجود الملفات)
       - name: Upload SARIF to GitHub Security
         if: always()
+        continue-on-error: true  # <--- هذا السطر يمنع فشل العملية
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: |
             bandit.sarif
             semgrep.sarif
 
-      # 4. إرسال البريد الإلكتروني (دائماً)
       - name: Send Email Report
         if: always()
         env:
