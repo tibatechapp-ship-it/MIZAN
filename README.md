@@ -2,13 +2,28 @@
 
 One lightweight, fast engine for code, secrets, dependencies and CI hardening.
 
-MIZAN Security exists because strong teams run **5+ separate security tools**
-while 97% of them plan to consolidate. Instead of repeating that sprawl,
-MIZAN reverse-engineers the strongest systems — CodeQL's baseline discipline,
-Semgrep's speed philosophy, Snyk's dependency reach — and rebuilds their best
-ideas in a single zero-dependency, read-only engine. See
-[docs/competitive-analysis.md](docs/competitive-analysis.md) for the full
-reverse-engineering study.
+MIZAN Security is an open-source security engine that inspects repositories
+read-only, explains every finding in plain language, and gives your team full
+control over what should fail a build and what should stay quiet.
+
+## What it does for you
+
+- **Start in one command** — `mizan full-scan .` covers code analysis,
+  secrets patterns, dependency manifests, CI configuration and change risk
+  in a single report.
+- **Stay focused** — the severity gate fails builds on critical/high
+  findings only; everything else is reported, not shouted.
+- **Move fast without noise** — baseline delta scanning absorbs known
+  findings and alerts you on what is new.
+- **Fast by design** — scanners run in parallel by default; wall time is
+  the slowest pass, not the sum.
+- **No surprises** — read-only by default: MIZAN never executes the code
+  it inspects, and any repair goes through a verified, isolated gate.
+- **Fits your pipeline** — SARIF 2.1.0 for GitHub code scanning, JSON and
+  HTML reports, CI-friendly exit codes, automatic PR comments.
+- **Works offline** — dependency vulnerability checks run against OSV.dev
+  with a local cache; no cloud account required.
+- **Accountable** — a ledger log records every engineering decision.
 
 ## Capabilities
 
@@ -41,18 +56,27 @@ python -m pip install -e .
 mizan inspect .
 mizan analyze . --output reports/analysis.json
 
-# Q2: severity gate — exit 1 only on critical/high findings
+# Severity gate — exit 1 only on critical/high findings
 mizan scan . --gate critical,high
 
-# Q2: delta scanning — absorb known findings, gate on new ones only
+# Delta scanning — absorb known findings, gate on new ones only
 mizan baseline . --save .mizan/baseline.json
 mizan scan . --gate --baseline .mizan/baseline.json
 
-# Q2: parallel full-scan (7 scanners, one JSON report)
+# Parallel full-scan (7 scanners, one JSON report)
 mizan full-scan . --jobs 4
 
 mizan ledger "Initial project setup" --actor human
 ```
+
+## Evolution
+
+- **v0.8.x** — Severity gate, baseline delta scanning, parallel full-scan,
+  smoother gate UX.
+- **v0.7.0** — Security hardening wave: safe scan/publish CI pipeline,
+  verified isolated repair gate, disclosure policy.
+- **v0.2.0** — Verified-fix engine, OSV vulnerability feeds, SARIF output,
+  accountability ledger.
 
 ## Project status
 
