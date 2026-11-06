@@ -23,6 +23,11 @@ PLUGINS = (
             "process-execution",
             "shell-true",
             "hardcoded-secret-candidate",
+            "unsafe-deserialization",
+            "yaml-unsafe-load",
+            "sql-injection",
+            "path-traversal",
+            "weak-crypto",
         ),
     ),
     Plugin(
