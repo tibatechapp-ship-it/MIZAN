@@ -15,6 +15,17 @@ import unittest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 
+def _offline_env(testcase):
+    """Hermetic OSV: dependencies' batch check resolves offline (deterministic
+    offline-miss) instead of hitting the network inside unit tests."""
+    old = os.environ.get("MIZAN_OFFLINE")
+    os.environ["MIZAN_OFFLINE"] = "1"
+    testcase.addCleanup(
+        lambda: os.environ.pop("MIZAN_OFFLINE", None) if old is None
+        else os.environ.__setitem__("MIZAN_OFFLINE", old)
+    )
+
+
 def _make_project(root):
     """Small deterministic tree inside a real git repo (git/ci scanners
     require one) with mixed languages and a manifest."""
@@ -41,9 +52,15 @@ def _make_project(root):
 
 
 class TestParallelFullScan(unittest.TestCase):
-    """BM-114..BM-117: thread-parallel scanners stay deterministic."""
+    """BM-114..BM-117: thread-parallel scanners stay deterministic.
+
+    MIZAN_OFFLINE=1 (module level below) keeps the suite hermetic: the
+    dependencies section resolves OSV offline (offline-miss, deterministic
+    payload) instead of hitting the network inside the test suite.
+    """
 
     def setUp(self):
+        _offline_env(self)
         self.tmp = _make_project(tempfile.mkdtemp())
         from mizan.cli import full_scan_repository
         self._full_scan = full_scan_repository
@@ -84,6 +101,9 @@ class TestParallelFullScan(unittest.TestCase):
 
 class TestBaselineCLI(unittest.TestCase):
     """BM-118: `mizan baseline` command persists a usable baseline file."""
+
+    def setUp(self):
+        _offline_env(self)
 
     def test_bm_118_baseline_command_saves_fingerprints(self):
         """BM-118: CLI baseline --save writes mizan-baseline/1 doc."""

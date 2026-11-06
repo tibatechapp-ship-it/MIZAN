@@ -74,17 +74,37 @@ runs:
     - name: Run MIZAN vuln-scan
       id: scan
       shell: bash
+      env:
+        SCAN_PATH: ${{ inputs.path }}
+        SARIF_OUTPUT: ${{ inputs.sarif-output }}
       run: |
-        SARIF_PATH="$(pwd)/${{ inputs.sarif-output }}"
-        mizan vuln-scan "${{ inputs.path }}" --format sarif -o "$SARIF_PATH" || true
-        if [ -f "$SARIF_PATH" ]; then
-          COUNT=$(python -c "import json; d=json.load(open('$SARIF_PATH')); print(len(d['runs'][0]['results']))")
-        else
-          COUNT=0
+        SARIF_PATH="$(pwd)/$SARIF_OUTPUT"
+        set +e
+        mizan vuln-scan "$SCAN_PATH" --format sarif -o "$SARIF_PATH"
+        RC=$?
+        set -e
+        # Exit-code contract (mizan scan / vuln-scan):
+        #   0 = scan completed, no findings
+        #   1 = scan completed, findings present
+        #   >= 2 = scan FAILURE (bad path, OSV outage, ...)
+        # RW-205: a scan failure or a missing/invalid report must NEVER be
+        # reported as "0 vulnerabilities" — fail loudly instead.
+        if [ "$RC" -ge 2 ]; then
+          echo "::error::MIZAN vuln-scan FAILED (exit $RC). This is a scan failure, not 'no vulnerabilities'."
+          exit 1
         fi
+        if [ ! -f "$SARIF_PATH" ]; then
+          echo "::error::MIZAN exited $RC but produced no SARIF report. Failing rather than reporting 0 findings."
+          exit 1
+        fi
+        if ! python -c "import json,sys; d=json.load(open(sys.argv[1])); runs=d.get('runs'); assert isinstance(runs,list) and len(runs)>=1 and isinstance(runs[0].get('results'),list)" "$SARIF_PATH"; then
+          echo "::error::SARIF report is malformed — refusing to treat it as a clean scan."
+          exit 1
+        fi
+        COUNT=$(python -c "import json,sys; print(len(json.load(open(sys.argv[1]))['runs'][0]['results']))" "$SARIF_PATH")
         echo "findings-count=$COUNT" >> "$GITHUB_OUTPUT"
         echo "sarif-file=$SARIF_PATH" >> "$GITHUB_OUTPUT"
-        echo "::notice::MIZAN found $COUNT vulnerabilities"
+        echo "::notice::MIZAN scan completed (exit $RC): $COUNT vulnerabilities"
 
     - name: Upload SARIF to GitHub Code Scanning
       if: always() && hashFiles(inputs.sarif-output) != ''
@@ -96,9 +116,11 @@ runs:
     - name: Apply fixes (local only)
       if: inputs.auto-fix == 'true' && steps.scan.outputs.findings-count != '0'
       shell: bash
+      env:
+        FIX_PATH: ${{ inputs.path }}
       run: |
         echo "::group::MIZAN fix --apply"
-        mizan fix "${{ inputs.path }}" --apply || echo "::warning::MIZAN fix encountered an issue"
+        mizan fix "$FIX_PATH" --apply || echo "::warning::MIZAN fix encountered an issue"
         echo "::endgroup::"
         git diff --stat || true
 
@@ -107,6 +129,9 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
+        PR_FINDINGS: ${{ steps.scan.outputs.findings-count }}
+        EVENT_BASE_REF: ${{ github.event.pull_request.base.ref }}
+        REPO_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
       run: |
         if [ -z "$(git status --porcelain)" ]; then
           echo "::notice::No file changes to commit"
@@ -122,15 +147,15 @@ runs:
           echo "::notice::No committable changes after excluding SARIF"
           exit 0
         fi
-        git commit -m "fix(deps): auto-fix ${{ steps.scan.outputs.findings-count }} vulnerabilities via MIZAN"
+        git commit -m "fix(deps): auto-fix $PR_FINDINGS vulnerabilities via MIZAN"
         git push -u origin "$BRANCH"
-        BASE_BRANCH="${{ github.event.pull_request.base.ref }}"
-        [ -z "$BASE_BRANCH" ] && BASE_BRANCH="${{ github.event.repository.default_branch }}"
+        BASE_BRANCH="$EVENT_BASE_REF"
+        [ -z "$BASE_BRANCH" ] && BASE_BRANCH="$REPO_DEFAULT_BRANCH"
         [ -z "$BASE_BRANCH" ] && BASE_BRANCH="main"
         echo "Base branch: $BASE_BRANCH"
         PR_URL=$(gh pr create \
-          --title "fix(deps): MIZAN auto-fix (${{ steps.scan.outputs.findings-count }} vulnerabilities)" \
-          --body "MIZAN detected ${{ steps.scan.outputs.findings-count }} dependency vulnerabilities and applied safe fixes. See the Security tab for the full SARIF report." \
+          --title "fix(deps): MIZAN auto-fix ($PR_FINDINGS vulnerabilities)" \
+          --body "MIZAN detected $PR_FINDINGS dependency vulnerabilities and applied safe fixes. See the Security tab for the full SARIF report." \
           --base "$BASE_BRANCH" \
           --head "$BRANCH" 2>&1) || {
             echo "::warning::gh pr create failed: $PR_URL"
@@ -149,19 +174,26 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        FINDINGS_COUNT: ${{ steps.scan.outputs.findings-count }}
+        EXCLUDE_PATHS: ${{ inputs.approve-exclude-paths }}
+        ALLOWED_AUTHORS: ${{ inputs.approve-allowed-authors }}
+        APPROVE_PRS: ${{ inputs.approve-prs }}
+        MERGE_PRS: ${{ inputs.merge-prs }}
       run: |
-        ARGS="--pr ${{ github.event.pull_request.number }}"
-        ARGS="$ARGS --findings ${{ steps.scan.outputs.findings-count }}"
-        ARGS="$ARGS --exclude-paths '${{ inputs.approve-exclude-paths }}'"
-        ARGS="$ARGS --allowed-authors '${{ inputs.approve-allowed-authors }}'"
-        if [ "${{ inputs.approve-prs }}" = "true" ]; then
-          ARGS="$ARGS --approve"
-        fi
-        if [ "${{ inputs.merge-prs }}" = "true" ]; then
-          ARGS="$ARGS --approve --merge"
-        fi
-        echo "Running: mizan approve $ARGS"
-        eval "mizan approve $ARGS"
+        # RW-206: NO eval, NO string-built commands. Every value arrives
+        # through the environment and is passed as a literal argument via a
+        # bash array — shell metacharacters in inputs can never execute.
+        args=(approve
+          --pr "$PR_NUMBER"
+          --findings "$FINDINGS_COUNT"
+          --exclude-paths "$EXCLUDE_PATHS"
+          --allowed-authors "$ALLOWED_AUTHORS"
+        )
+        if [ "$APPROVE_PRS" = "true" ]; then args+=(--approve); fi
+        if [ "$MERGE_PRS" = "true" ]; then args+=(--approve --merge); fi
+        echo "Running: mizan ${args[*]}"
+        mizan "${args[@]}"
 
     - name: Fail on findings
       if: inputs.fail-on-findings == 'true' && steps.scan.outputs.findings-count != '0'

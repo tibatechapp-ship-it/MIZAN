@@ -1,6 +1,7 @@
-"""Offline dependency manifest inspection."""
+"""Dependency manifest inspection + OSV.dev vulnerability check."""
 
 import json
+import os
 import re
 
 try:
@@ -11,6 +12,7 @@ except ModuleNotFoundError:
 from pathlib import Path
 
 from mizan._version import __version__
+from mizan.vulnerabilities import check_vulnerabilities_batch, severity_of
 
 MAX_MANIFEST_SIZE = 2 * 1024 * 1024
 
@@ -204,6 +206,41 @@ def scan_dependencies(directory="."):
                 "message": str(exc)[:200],
             })
 
+    # RW-204: the full-scan gate must see OSV findings. This section
+    # previously NEVER queried OSV (`vulnerability_database_checked` was
+    # hardcoded False) while the report promised "deps/OSV" gating — a
+    # silent coverage hole. One batched round-trip (offline-aware via
+    # MIZAN_OFFLINE / MIZAN_OSV_CACHE); failures are surfaced as
+    # ``osv_errors`` / ``osv_unchecked`` and drive the gate's
+    # "incomplete" decision — never cached as a clean result.
+    osv_results = check_vulnerabilities_batch(
+        dependencies, use_cache=os.environ.get("MIZAN_OSV_CACHE") == "1"
+    )
+    osv_errors = []
+    osv_unchecked = []
+    for entry in osv_results:
+        dep = {k: v for k, v in entry.items()
+               if k in ("name", "version", "ecosystem", "manifest")}
+        source = entry.get("source")
+        if source in ("scan-error", "detail-error"):
+            osv_errors.append({
+                **dep, "source": source,
+                "error": entry.get("error", ""),
+                "vuln_ids": entry.get("vuln_ids", []),
+            })
+        elif source == "offline-miss":
+            osv_unchecked.append({**dep, "source": source})
+        for vuln in entry.get("vulns", []):
+            findings.append({
+                "file": dep.get("manifest") or dep.get("name", ""),
+                "rule": f"osv-{vuln.get('id', 'unknown')}",
+                "severity": severity_of(vuln),
+                "message": f"{dep.get('name', '?')}@{dep.get('version', '?')}: "
+                           f"{vuln.get('summary') or vuln.get('id', '')}",
+                "dependency": dep,
+                "vuln": vuln,
+            })
+
     return {
         "engine": "MIZAN Dependency Scanner",
         "version": __version__,
@@ -214,7 +251,9 @@ def scan_dependencies(directory="."):
         "dependencies": dependencies,
         "findings_count": len(findings),
         "findings": findings,
-        "vulnerability_database_checked": False,
+        "vulnerability_database_checked": True,
+        "osv_errors": osv_errors,
+        "osv_unchecked": osv_unchecked,
         "mode": "read-only",
         "execution_performed": False,
     }

@@ -1,12 +1,30 @@
 import json
+import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+
 from mizan.dependency_scanner import scan_dependencies
 
 
+def _offline_env(testcase):
+    """Hermetic OSV: the RW-204 batch check resolves offline (deterministic
+    offline-miss) instead of hitting the network inside unit tests."""
+    old = os.environ.get("MIZAN_OFFLINE")
+    os.environ["MIZAN_OFFLINE"] = "1"
+    testcase.addCleanup(
+        lambda: os.environ.pop("MIZAN_OFFLINE", None) if old is None
+        else os.environ.__setitem__("MIZAN_OFFLINE", old)
+    )
+
+
 class DependencyScannerTests(unittest.TestCase):
+
+    def setUp(self):
+        _offline_env(self)
 
     def test_detects_requirements(self):
         with tempfile.TemporaryDirectory() as temp:

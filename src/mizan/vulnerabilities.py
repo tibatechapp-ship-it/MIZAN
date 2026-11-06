@@ -231,8 +231,17 @@ def check_vulnerabilities_batch(packages, offline=None, use_cache=True):
                             pkg.get("name", ""), pkg.get("version", ""),
                             pkg.get("ecosystem", "PyPI"),
                         )
-                    except OsvScanError:
-                        vulns = []
+                    except OsvScanError as exc:
+                        # RW-203: a failed query is NOT a clean result. Record
+                        # the failure explicitly and never cache an empty list
+                        # that would make a network outage look like
+                        # "no vulnerabilities" on every later run.
+                        results[idx] = {
+                            **pkg, "vulns": [],
+                            "source": "scan-error",
+                            "error": str(exc),
+                        }
+                        continue
                     results[idx] = {**pkg, "vulns": vulns, "source": "single-fallback"}
                     if use_cache:
                         _cache_put(cache, pkg.get("ecosystem", "PyPI"),
@@ -255,8 +264,17 @@ def check_vulnerabilities_batch(packages, offline=None, use_cache=True):
                             pkg.get("name", ""), pkg.get("version", ""),
                             pkg.get("ecosystem", "PyPI"),
                         )
-                    except OsvScanError:
-                        vulns = []
+                    except OsvScanError as exc:
+                        # RW-203: the batch said "vulnerable" but detail fetch
+                        # failed — record the failure, keep vuln_ids for the
+                        # report, and NEVER cache the empty result.
+                        results[idx] = {
+                            **pkg, "vulns": [],
+                            "source": "detail-error",
+                            "error": str(exc),
+                            "vuln_ids": vuln_ids,
+                        }
+                        continue
                     results[idx] = {
                         **pkg, "vulns": vulns,
                         "source": "batch+detail",

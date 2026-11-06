@@ -1,0 +1,58 @@
+{
+  "schema": "mizan-baseline/1",
+  "tool": "MIZAN Security",
+  "version": "0.8.2",
+  "created_at": "2026-11-06T01:35:22Z",
+  "count": 8,
+  "note": "Dogfood baseline: absorbs ONLY intentional test bait fixtures (tests/fixtures/bait/*) and known tool-internal findings. New findings always gate.",
+  "fingerprints": {
+    "fc9adba7a72c9097": {
+      "rule": "todo",
+      "file": "tests/test_analyzer.py",
+      "line": 56,
+      "severity": "info"
+    },
+    "8104b72f4a1c2e31": {
+      "rule": "todo",
+      "file": "tests/test_q2_parallel.py",
+      "line": 42,
+      "severity": "info"
+    },
+    "ef6b8e00ff59af8f": {
+      "rule": "todo",
+      "file": "tests/test_scanner.py",
+      "line": 14,
+      "severity": "info"
+    },
+    "6503d1ec75d1e261": {
+      "rule": "dynamic-execution",
+      "file": "tests/fixtures/bait/dangerous_test.py",
+      "line": 1,
+      "severity": "high"
+    },
+    "9ac69c4e05d090c9": {
+      "rule": "dynamic-execution",
+      "file": "tests/fixtures/bait/dangerous_v3.py",
+      "line": 1,
+      "severity": "high"
+    },
+    "f161f2a10693238b": {
+      "rule": "continue-on-error",
+      "file": ".github/workflows/mizan-scan.yml",
+      "line": 164,
+      "severity": "medium"
+    },
+    "03831181ef0420e0": {
+      "rule": "continue-on-error",
+      "file": ".github/workflows/mizan-scan.yml",
+      "line": 173,
+      "severity": "medium"
+    },
+    "9b7955506d7438e4": {
+      "rule": "continue-on-error",
+      "file": ".github/workflows/mizan-scan.yml",
+      "line": 187,
+      "severity": "medium"
+    }
+  }
+}
