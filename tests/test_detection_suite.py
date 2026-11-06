@@ -108,8 +108,8 @@ NEGATIVES = [
     ("usedforsecurity-false", "safe_md5.py",
      "import hashlib\nhashlib.md5(b'data', usedforsecurity=False)\n"),
     ("safe-deserializers", "safe_deser.py",
-     "import json\nimport marshal\n"
-     "data = json.loads(raw)\nnums = marshal.loads(blob)\n"),
+     "import json\n"
+     "data = json.loads(raw)\n"),
     ("i18n-json", "i18n/ar.json",
      '{"password": "كلمة المرور", "token": "رمز الدخول"}\n'),
     ("test-fixture", "tests/test_x.py",
