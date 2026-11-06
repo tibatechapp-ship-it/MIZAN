@@ -21,8 +21,10 @@ What it does (read-only, zero dependencies):
                                discovered in source and checked against the
                                documentation (doc-undocumented-endpoint).
 * Documentation coverage     — public Python functions/classes without a
-                               docstring (doc-missing-docstring) plus an
-                               overall docstring coverage percentage.
+                               docstring (doc-missing-docstring), docstrings
+                               too shallow to be useful
+                               (doc-shallow-docstring, < 4 words), and the
+                               overall coverage percentage.
 * README quality             — missing README, missing install/usage
                                sections, and shell commands that reference
                                files which do not exist (doc-readme-quality).
@@ -30,18 +32,26 @@ What it does (read-only, zero dependencies):
                                file AFTER the doc that describes it was
                                last updated, the doc is flagged for review
                                (doc-needs-review). Git-aware, read-only.
+                               Scope: the LATEST commit only — older
+                               history is out of scope by design, and
+                               shallow clones degrade to a safe no-op.
 
 Precision-first (the v0.9.0 lesson): every rule is built to stay silent
-unless the evidence is concrete. External URLs are never validated over
-the network, ambiguous references are skipped rather than guessed, and
-noisy rules are capped. Suggestions are REPORT-ONLY — the module never
-writes to the scanned repository (doc-scan cannot mutate your docs).
+unless the evidence is concrete. External URLs (http/https/mailto/tel)
+are COUNTED but never judged — no network is ever contacted, so a
+network failure can never be misread as a broken link. Ambiguous
+references (pattern vocabulary, dotted calls, exclusion-tree mentions,
+output redirections, fenced code-example content) are skipped rather
+than guessed, and noisy rules are capped. Suggestions are REPORT-ONLY —
+the module never writes to the scanned repository (doc-scan cannot
+mutate your docs).
 """
 
 import ast
 import os
 import re
 import subprocess
+import unicodedata
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -63,6 +73,7 @@ CAPS = {
     "doc-stale-reference": 30,
     "doc-undocumented-endpoint": 30,
     "doc-missing-docstring": 30,
+    "doc-shallow-docstring": 30,
     "doc-orphan-code": 20,
     "doc-needs-review": 10,
     "doc-readme-quality": 10,
@@ -135,10 +146,11 @@ JS_ENDPOINT = re.compile(
     r"\b(?:app|router|api)\.(get|post|put|delete|patch|all)\("
     r"\s*['\"`]([^'\"`]+)['\"`]"
 )
+# Flask's @app.route and Express's .all() are method-agnostic handlers.
+ANY_METHOD = {"ROUTE", "ALL"}
 JS_FUNCTION = re.compile(
     r"\bfunction\s+([A-Za-z_$][\w$]*)\s*\("
 )
-TOKEN_PATH = re.compile(r"^[\w./\\+-]+\.[A-Za-z0-9]{1,8}$")
 TOKEN_SYMBOL = re.compile(r"^[A-Za-z_][\w.]*\(\)$")
 
 DYNAMIC_SEGMENT = re.compile(r"^[:<{*].*[}>]?$")
@@ -148,19 +160,47 @@ DYNAMIC_SEGMENT = re.compile(r"^[:<{*].*[}>]?$")
 # small helpers
 # --------------------------------------------------------------------------
 
+EXPLICIT_ANCHOR = re.compile(
+    r"<a\s[^>]*?(?:id|name)=[\"']([^\"']+)[\"']", re.IGNORECASE
+)
+# Any URI scheme (dsh-session:…, obsidian://, C:\…) — a link with a
+# scheme is by definition NOT a repo-relative file path; only http(s),
+# mailto, tel, data and file are "known external", everything else is
+# a custom/app scheme. Either way: counted, never judged.
+URI_SCHEME = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
+
+
 def _github_anchor(text):
-    """GitHub-style slug for a heading."""
+    """GitHub-style slug for a heading (github-slugger semantics).
+
+    Verified semantics that matter in practice: punctuation and symbols
+    are REMOVED (em-dash U+2014 included — it is Pd), a literal hyphen
+    '-' is KEPT, and every space becomes one hyphen WITHOUT collapsing
+    runs (``a — b`` → ``a--b``, ``a - b`` → ``a---b``).
+    """
     slug = text.strip().lower()
-    slug = re.sub(r"[^\w\s\u00C0-\uFFFF-]", "", slug, flags=re.UNICODE)
-    return re.sub(r"\s+", "-", slug)
+    kept = []
+    for char in slug:
+        if char in ("-", " "):
+            kept.append(char)
+            continue
+        category = unicodedata.category(char)
+        if category.startswith(("P", "S")):
+            continue
+        kept.append(char)
+    return "".join(kept).replace(" ", "-")
 
 
 def _heading_anchors(text):
-    """Collect every heading anchor of a markdown document (with the
-    GitHub duplicate-heading ``-1``/``-2`` suffixes)."""
+    """Collect every valid anchor target of a markdown document:
+    GitHub-style heading slugs (with duplicate ``-1``/``-2`` suffixes)
+    PLUS explicit HTML anchors (``<a id=...>`` / ``<a name=...>``) that
+    authors place manually — links to them are valid by construction."""
     anchors = set()
     counts = {}
     for line in text.splitlines():
+        for match in EXPLICIT_ANCHOR.finditer(line):
+            anchors.add(match.group(1))
         match = MD_HEADING.match(line.strip())
         if not match:
             continue
@@ -169,6 +209,29 @@ def _heading_anchors(text):
         counts[base] = n + 1
         anchors.add(base if n == 0 else f"{base}-{n}")
     return anchors
+
+
+def _fenced_line_numbers(text):
+    """Line numbers that sit INSIDE a fenced code block (```/~~~).
+
+    Fenced content is CODE EXAMPLES, not document prose: a markdown link
+    or an inline token written inside a fence is demo material
+    (``@[label](dsh-session:…)`` inside a TS snippet) — never a claim
+    about the repository. Only fence-OUTSIDE lines are judged for links
+    and backtick references; shell-command paths inside shell fences keep
+    their own dedicated check (_shell_command_paths).
+    """
+    fenced = set()
+    in_fence = False
+    for number, line in enumerate(text.splitlines(), 1):
+        fence = FENCE.match(line.strip())
+        if fence:
+            in_fence = not in_fence
+            fenced.add(number)
+            continue
+        if in_fence:
+            fenced.add(number)
+    return fenced
 
 
 def _is_comment_line(line):
@@ -215,8 +278,8 @@ def _exists_within(root, candidate):
 # doc reference extraction
 # --------------------------------------------------------------------------
 
-def _extract_doc_refs(text):
-    """Per-line backticked references.
+def _extract_doc_refs(text, skip_lines=None):
+    """Per-line backticked references (fenced code lines are skipped).
 
     Returns (path_refs, symbol_refs) where each entry is
     ``(line_number, token)``. Precision rules: a token is a PATH reference
@@ -226,6 +289,8 @@ def _extract_doc_refs(text):
     """
     path_refs, symbol_refs = [], []
     for number, line in enumerate(text.splitlines(), 1):
+        if skip_lines and number in skip_lines:
+            continue
         for span in BACKTICK.findall(line):
             token = span.strip()
             if not token or " " in token or token.startswith(("-", "$")):
@@ -308,11 +373,18 @@ def _shell_command_paths(text):
 # --------------------------------------------------------------------------
 
 def _collect_python_symbols(files):
-    """Public module-level function/class names + docstring coverage."""
+    """Public module-level function/class names + docstring coverage.
+
+    Quality, not just presence: a docstring of fewer than 4 words cannot
+    meaningfully describe a symbol — such "shallow" docstrings are
+    reported separately (doc-shallow-docstring) so a 100% coverage number
+    cannot be gamed with filler.
+    """
     symbols = set()
     total = 0
     documented = 0
     missing = []  # (file, line, name)
+    shallow = []  # (file, line, name)
     for path in files:
         if path.suffix.lower() != ".py" or path.name == "__init__.py":
             continue
@@ -332,11 +404,14 @@ def _collect_python_symbols(files):
                 continue
             symbols.add(node.name)
             total += 1
-            if ast.get_docstring(node) is None:
+            docstring = ast.get_docstring(node)
+            if docstring is None:
                 missing.append((path, node.lineno, node.name))
             else:
                 documented += 1
-    return symbols, total, documented, missing
+                if len(docstring.split()) < 4:
+                    shallow.append((path, node.lineno, node.name))
+    return symbols, total, documented, missing, shallow
 
 
 def _collect_js_symbols(files):
@@ -367,10 +442,11 @@ def _collect_endpoints(files):
             for regex in (PY_ENDPOINT, JS_ENDPOINT):
                 match = regex.search(line)
                 if match:
+                    method = match.group(1).upper()
                     endpoints.append({
                         "file": path,
                         "line": number,
-                        "method": match.group(1).upper(),
+                        "method": "ANY" if method in ANY_METHOD else method,
                         "path": match.group(2),
                     })
                     break  # one route per line — `@app.get(` also fits the JS pattern
@@ -458,7 +534,7 @@ def scan_documentation_repository(directory="."):
 
     # -- code inventory ----------------------------------------------------
     source_files = list(iter_source_files(root))
-    py_symbols, sym_total, sym_documented, sym_missing = \
+    py_symbols, sym_total, sym_documented, sym_missing, sym_shallow = \
         _collect_python_symbols(source_files)
     py_symbols |= _collect_js_symbols(source_files)
 
@@ -468,21 +544,28 @@ def scan_documentation_repository(directory="."):
     all_symbol_refs = []    # (doc, line, token)
     broken_links = 0
     total_links_checked = 0
+    external_links_skipped = 0
     doc_code_map = {}
 
     for doc_path, text in docs_text.items():
         rel = str(doc_path.relative_to(root))
         valid_paths = set()
         anchors = _heading_anchors(text)
+        fenced_lines = _fenced_line_numbers(text)
         anchors_cache[doc_path] = anchors
 
         for number, line in enumerate(text.splitlines(), 1):
+            if number in fenced_lines:
+                continue
             targets = [
                 m.group(1) for m in MD_LINK.finditer(line)
             ] + [m.group(1) for m in MD_HTML_LINK.finditer(line)]
             for target in targets:
-                if target.startswith(("http://", "https://", "mailto:",
-                                      "tel:", "data:", "file:")):
+                if URI_SCHEME.match(target):
+                    # External/custom-scheme references are COUNTED but
+                    # never judged: no network is contacted, so a network
+                    # failure can never be misread as a broken link.
+                    external_links_skipped += 1
                     continue
                 path_part, _, anchor = target.partition("#")
                 path_part = unquote(path_part).split("?")[0]
@@ -528,10 +611,12 @@ def scan_documentation_repository(directory="."):
                 broken_links += 1
                 add(
                     rel, number, "doc-broken-link", "medium",
-                    f"Link target does not exist: {path_part}",
+                    f"Local link target does not exist: {path_part}",
                 )
 
-        path_refs, symbol_refs = _extract_doc_refs(text)
+        path_refs, symbol_refs = _extract_doc_refs(
+            text, skip_lines=fenced_lines
+        )
         all_path_refs.extend((doc_path, n, t) for n, t in path_refs)
         all_symbol_refs.extend((doc_path, n, t) for n, t in symbol_refs)
         for _, token in path_refs:
@@ -609,7 +694,7 @@ def scan_documentation_repository(directory="."):
         else:
             continue
 
-    # -- docstring coverage -----------------------------------------------
+    # -- docstring coverage + quality ---------------------------------------
     for path, line, name in sym_missing:
         if findings_count_rule(findings, "doc-missing-docstring") >= \
                 CAPS["doc-missing-docstring"]:
@@ -619,6 +704,18 @@ def scan_documentation_repository(directory="."):
             "info",
             f"Public symbol '{name}' has no docstring.",
             suggestion=f"Add a docstring explaining what {name} does.",
+        )
+    for path, line, name in sym_shallow:
+        if findings_count_rule(findings, "doc-shallow-docstring") >= \
+                CAPS["doc-shallow-docstring"]:
+            break
+        add(
+            str(path.relative_to(root)), line, "doc-shallow-docstring",
+            "info",
+            f"Docstring of '{name}' is too shallow to describe it "
+            f"(fewer than 4 words).",
+            suggestion=f"Describe what {name} does, its inputs and its "
+                       "effect.",
         )
 
     # -- README quality -----------------------------------------------------
@@ -749,6 +846,8 @@ def scan_documentation_repository(directory="."):
             ) if sym_total else 100.0,
             "endpoints_total": len(endpoints),
             "endpoints_documented": endpoints_documented,
+            "shallow_docstrings": len(sym_shallow),
+            "external_links_skipped": external_links_skipped,
             "stale_doc_code_candidates": stale_candidates,
             "git_change_impact_available": git_context is not None,
             "doc_code_map": doc_code_map,
@@ -767,6 +866,7 @@ RULE_LABELS = {
     "doc-stale-reference": "Stale doc references",
     "doc-undocumented-endpoint": "Undocumented API endpoints",
     "doc-missing-docstring": "Missing docstrings",
+    "doc-shallow-docstring": "Shallow docstrings (< 4 words)",
     "doc-readme-quality": "README quality",
     "doc-orphan-code": "Undocumented modules",
     "doc-needs-review": "Docs needing review after change",
@@ -783,13 +883,15 @@ def render_doc_intel_text(section):
         "",
         f"Docs found            : {metrics['docs_found']}",
         f"Local links checked   : {metrics['local_links_checked']}"
-        f"  (broken: {metrics['broken_links']})",
+        f"  (broken: {metrics['broken_links']},"
+        f" external skipped: {metrics['external_links_skipped']})",
         f"Doc coverage          : {metrics['documented_code_files']}"
         f"/{metrics['code_files']} source files "
         f"({metrics['doc_coverage_pct']}%)",
         f"Docstring coverage    : {metrics['documented_symbols']}"
         f"/{metrics['public_symbols_python']} public symbols "
-        f"({metrics['docstring_coverage_pct']}%)",
+        f"({metrics['docstring_coverage_pct']}%,"
+        f" shallow: {metrics['shallow_docstrings']})",
         f"API endpoints         : {metrics['endpoints_documented']}"
         f"/{metrics['endpoints_total']} documented",
         f"Git change-impact     : "
