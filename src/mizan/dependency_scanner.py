@@ -12,6 +12,7 @@ except ModuleNotFoundError:
 from pathlib import Path
 
 from mizan._version import __version__
+from mizan.reachability import annotate_reachability
 from mizan.vulnerabilities import check_vulnerabilities_batch, severity_of
 
 MAX_MANIFEST_SIZE = 2 * 1024 * 1024
@@ -25,6 +26,15 @@ MANIFESTS = {
     "go.mod",
     "composer.json",
 }
+
+
+def _is_requirements_file(name):
+    """v0.11.0: requirements*.txt — including requirements-dev.txt — are
+    dependency manifests (previously only exact 'requirements.txt' was
+    scanned, so dev-pinned dependency sets went entirely unseen)."""
+    return name == "requirements.txt" or (
+        name.startswith("requirements") and name.endswith(".txt")
+    )
 
 
 def parse_requirements(path):
@@ -53,12 +63,23 @@ def parse_requirements(path):
     return dependencies
 
 
+def _pypi_records(path, records):
+    """Tag requirements/pyproject records with ecosystem + dev scope.
+
+    v0.11.0: ``requirements-dev.txt`` / ``requirements_dev.txt`` style
+    filenames mark a dev-scoped dependency set (a documented filename
+    convention, not a guess about content).
+    """
+    scope = "dev" if "dev" in Path(path).stem.lower() else "runtime"
+    return [dict(record, ecosystem="PyPI", scope=scope) for record in records]
+
+
 def parse_manifest(path):
     """Parse a dependency manifest into dependency records."""
     name = path.name
 
-    if name == "requirements.txt":
-        return parse_requirements(path)
+    if _is_requirements_file(name):
+        return _pypi_records(path, parse_requirements(path))
 
     if name == "package.json":
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -74,6 +95,12 @@ def parse_manifest(path):
                     "name": package,
                     "constraint": str(version),
                     "source": name,
+                    "ecosystem": "npm",
+                    # v0.11.0: devDependencies never ship to production
+                    # runtimes — deterministic scope, used for the
+                    # documented dev-severity cap on OSV findings.
+                    "scope": "dev" if section == "devDependencies"
+                             else "runtime",
                 })
 
         return result
@@ -92,6 +119,8 @@ def parse_manifest(path):
                     .split(">")[0].split("=")[0].strip(),
                 "constraint": item,
                 "source": name,
+                "ecosystem": "PyPI",
+                "scope": "runtime",
             }
             for item in dependencies
         ]
@@ -110,6 +139,12 @@ def parse_manifest(path):
                     "name": package,
                     "constraint": str(constraint),
                     "source": name,
+                    "ecosystem": "crates.io",
+                    # dev- AND build-dependencies are not shipped inside
+                    # the produced artifact (simplification documented in
+                    # the CHANGELOG).
+                    "scope": "runtime" if section == "dependencies"
+                             else "dev",
                 })
 
         return result
@@ -125,6 +160,9 @@ def parse_manifest(path):
                         "name": package,
                         "constraint": str(version),
                         "source": name,
+                        "ecosystem": "Packagist",
+                        "scope": "dev" if section == "require-dev"
+                                 else "runtime",
                     })
 
         return result
@@ -132,17 +170,35 @@ def parse_manifest(path):
     if name == "go.mod":
         result = []
 
+        # v0.11.0: also parse single-line `require mod v1` forms and
+        # require-blocks (the previous line regex only matched dep lines
+        # that started the line, missing the common one-line require).
+        in_block = False
         for line in path.read_text(
             encoding="utf-8", errors="replace"
         ).splitlines():
-            match = re.match(
-                r"^\s*([A-Za-z0-9._/-]+)\s+(v\S+)", line
-            )
+            line = line.strip()
+            if not line or line.startswith("//"):
+                continue
+            if line == "require (":
+                in_block = True
+                continue
+            if in_block and line == ")":
+                in_block = False
+                continue
+            if in_block:
+                match = re.match(r"([A-Za-z0-9._/-]+)\s+(v\S+)", line)
+            else:
+                match = re.match(
+                    r"(?:require\s+)?([A-Za-z0-9._/-]+)\s+(v\S+)", line
+                )
             if match:
                 result.append({
                     "name": match.group(1),
                     "constraint": match.group(2),
                     "source": name,
+                    "ecosystem": "Go",
+                    "scope": "runtime",
                 })
 
         return result
@@ -157,6 +213,9 @@ def parse_manifest(path):
                     "name": package,
                     "constraint": str(version),
                     "source": name,
+                    "ecosystem": "PyPI",
+                    "scope": "dev" if section == "dev-packages"
+                             else "runtime",
                 })
 
         return result
@@ -184,7 +243,9 @@ def scan_dependencies(directory="."):
         if any(part in ignored for part in path.parts):
             continue
 
-        if not path.is_file() or path.name not in MANIFESTS:
+        if not path.is_file() or not (
+            path.name in MANIFESTS or _is_requirements_file(path.name)
+        ):
             continue
 
         if path.stat().st_size > MAX_MANIFEST_SIZE:
@@ -221,9 +282,10 @@ def scan_dependencies(directory="."):
     )
     osv_errors = []
     osv_unchecked = []
+    dev_capped = 0
     for entry in osv_results:
         dep = {k: v for k, v in entry.items()
-               if k in ("name", "version", "ecosystem", "manifest")}
+               if k in ("name", "version", "ecosystem", "manifest", "scope")}
         source = entry.get("source")
         if source in ("scan-error", "detail-error"):
             osv_errors.append({
@@ -234,15 +296,33 @@ def scan_dependencies(directory="."):
         elif source == "offline-miss":
             osv_unchecked.append({**dep, "source": source})
         for vuln in entry.get("vulns", []):
-            findings.append({
+            severity = severity_of(vuln)
+            finding = {
                 "file": dep.get("manifest") or dep.get("name", ""),
                 "rule": f"osv-{vuln.get('id', 'unknown')}",
-                "severity": severity_of(vuln),
+                "severity": severity,
                 "message": f"{dep.get('name', '?')}@{dep.get('version', '?')}: "
                            f"{vuln.get('summary') or vuln.get('id', '')}",
                 "dependency": dep,
                 "vuln": vuln,
-            })
+            }
+            # v0.11.0 — deterministic dev-dependency cap. devDependencies /
+            # dev-packages / require-dev never ship to production runtimes,
+            # so a CRITICAL/HIGH OSV record on them is capped at "medium"
+            # (below the default gate) with the original severity PRESERVED
+            # in "original_severity" — visible, never hidden, and the cap
+            # is undone by gating on "critical,high,medium" explicitly.
+            if dep.get("scope") == "dev" and \
+                    str(severity).upper() in ("CRITICAL", "HIGH"):
+                finding["severity"] = "medium"
+                finding["original_severity"] = str(severity).upper()
+                finding["scope"] = "dev"
+                dev_capped += 1
+            findings.append(finding)
+
+    # v0.11.0 — shallow reachability annotation (informational ONLY:
+    # "not-imported" never downgrades anything; see reachability.py).
+    reachability_annotated = annotate_reachability(findings, root)
 
     return {
         "engine": "MIZAN Dependency Scanner",
@@ -254,6 +334,9 @@ def scan_dependencies(directory="."):
         "dependencies": dependencies,
         "findings_count": len(findings),
         "findings": findings,
+        "dev_severity_capped": dev_capped,
+        "reachability_annotated": reachability_annotated,
+        "reachability_mode": "shallow import scan — informational, never severity-changing",
         "vulnerability_database_checked": True,
         "osv_errors": osv_errors,
         "osv_unchecked": osv_unchecked,

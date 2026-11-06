@@ -29,6 +29,7 @@ import re
 from pathlib import Path
 
 from ._version import __version__
+from .custom_rules import apply_custom_rules, load_custom_rules
 
 IGNORED_DIRS = {
     ".git", ".venv", "venv", "__pycache__",
@@ -375,8 +376,13 @@ def iter_source_files(root):
             yield path
 
 
-def analyze_file(path, root):
-    """Analyze one source file and return its findings."""
+def analyze_file(path, root, custom_rules=()):
+    """Analyze one source file and return its findings.
+
+    ``custom_rules`` (v0.11.0): compiled rules loaded from the repo's
+    ``.mizan/rules.json`` — applied here so they flow through the SAME
+    pipeline (fingerprint, baseline, gate) as built-in rules.
+    """
     findings = []
 
     try:
@@ -451,6 +457,14 @@ def analyze_file(path, root):
                 "message": "Unresolved development marker.",
             })
 
+    if custom_rules:
+        findings.extend(apply_custom_rules(
+            content,
+            str(path.relative_to(root)),
+            path.suffix.lower(),
+            custom_rules,
+        ))
+
     return findings
 
 
@@ -464,9 +478,16 @@ def analyze_repository(directory="."):
     findings = []
     scanned = 0
 
+    # v0.11.0: repo-local declarative policies (.mizan/rules.json). A
+    # missing file is the normal case; a broken file yields explicit
+    # errors surfaced here AND treated as an incomplete gate source by
+    # the CLI — a scan that could not load its policies never certifies
+    # a clean pass.
+    custom_rules, custom_errors = load_custom_rules(root)
+
     for path in iter_source_files(root):
         scanned += 1
-        findings.extend(analyze_file(path, root))
+        findings.extend(analyze_file(path, root, custom_rules=custom_rules))
 
     return {
         "engine": "MIZAN AST Analyzer",
@@ -475,6 +496,8 @@ def analyze_repository(directory="."):
         "files_scanned": scanned,
         "findings_count": len(findings),
         "findings": findings,
+        "custom_rules_loaded": len(custom_rules),
+        "custom_rules_errors": custom_errors,
         "mode": "read-only",
         "execution_performed": False,
     }

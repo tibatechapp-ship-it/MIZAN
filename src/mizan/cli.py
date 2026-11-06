@@ -385,6 +385,10 @@ def main():
                     incomplete.append("osv")
                 if result.get("osv_unchecked"):
                     incomplete.append("osv-offline")
+                # v0.11.0: a policies file that could not be loaded is a
+                # partial scan of the repo's own rules — fail loud.
+                if result.get("custom_rules_errors"):
+                    incomplete.append("custom-rules")
                 result["gate"] = apply_gate(
                     result.get("findings", []),
                     blocking=severities,
@@ -444,6 +448,12 @@ def main():
                     incomplete.append("osv")
                 if deps.get("osv_unchecked"):
                     incomplete.append("osv-offline")
+                # v0.11.0: broken .mizan/rules.json = unenforced policies →
+                # the gate may not certify a clean pass (same doctrine as
+                # osv_errors / scanners_failed).
+                analysis = result.get("analysis") or {}
+                if analysis.get("custom_rules_errors"):
+                    incomplete.append("custom-rules")
                 result["gate"] = apply_gate(
                     collect_findings(result),
                     blocking=severities,

@@ -105,6 +105,17 @@ BUILTIN_SYMBOLS = frozenset({
     "bind", "emit", "scan", "analyze", "inspect",
 })
 
+# Tool-config file vocabulary: `.mizan/...` paths that MIZAN reads or
+# creates in the SCANNED repository (its own policies / baseline / cache).
+# Docs quote them as instructions to the user, not as claims about THIS
+# repo's tree — never judged (same doctrine as output-recipe and
+# directory-vocabulary exclusions).
+MIZAN_CONFIG_VOCABULARY = frozenset({
+    ".mizan/rules.json",
+    ".mizan/baseline.json",
+    ".mizan/osv-cache.json",
+})
+
 # Tokens that end with one of these extensions are treated as path
 # references (a slash is ALWAYS required — bare filenames are too
 # ambiguous to judge, the v0.9.0 precision principle).
@@ -635,6 +646,8 @@ def scan_documentation_repository(directory="."):
     for doc_path, number, token in all_path_refs:
         if stale_count >= CAPS["doc-stale-reference"]:
             break
+        if token.replace("\\", "/").lower() in MIZAN_CONFIG_VOCABULARY:
+            continue  # tool-config vocabulary — an instruction, not a claim
         if _resolve_ref(root, doc_path, token):
             continue
         # References escaping the repo root (../../shared/x.py) are

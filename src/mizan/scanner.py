@@ -16,6 +16,15 @@ def scan_repository(directory=".", category="all"):
     analysis = analyze_repository(directory)
     all_findings = analysis["findings"]
 
+    # v0.11.0: custom-rule findings belong to no built-in plugin — the
+    # category filter below would silently drop them. They bypass it
+    # (their own severity speaks) and are reported in their own section;
+    # the unified gate therefore always sees the repo's own policies.
+    custom_findings = [
+        finding for finding in all_findings
+        if str(finding.get("rule", "")).startswith("custom-")
+    ]
+
     selected_plugins = [
         plugin for plugin in PLUGINS
         if category == "all" or plugin.category == category
@@ -49,8 +58,11 @@ def scan_repository(directory=".", category="all"):
         "execution_performed": False,
         "files_scanned": analysis["files_scanned"],
         "plugins": results,
-        "findings_count": len(combined),
-        "findings": combined,
+        "custom_rules_loaded": analysis.get("custom_rules_loaded", 0),
+        "custom_rules_errors": analysis.get("custom_rules_errors", []),
+        "custom_findings_count": len(custom_findings),
+        "findings_count": len(combined) + len(custom_findings),
+        "findings": combined + custom_findings,
     }
 
 

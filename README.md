@@ -23,6 +23,14 @@ control over what should fail a build and what should stay quiet.
   HTML reports, CI-friendly exit codes, automatic PR comments.
 - **Works offline** — dependency vulnerability checks run against OSV.dev
   with a local cache; no cloud account required.
+- **Your own policies** — declarative custom rules in `.mizan/rules.json`
+  (regex per line, no new query language): invalid rules are rejected
+  loudly and an unloadable policies file never certifies a clean pass.
+- **Honest dependency precision** — correct OSV ecosystem per manifest
+  (npm / crates.io / Go / Packagist, not just PyPI), dev-dependency
+  findings capped below the default gate with the original severity
+  preserved, and shallow import-based reachability metadata that
+  informs triage without ever downgrading a severity.
 - **Accountable** — a ledger log records every engineering decision.
 
 ## Capabilities
@@ -63,6 +71,19 @@ mizan analyze . --output reports/analysis.json
 # Severity gate — exit 1 only on critical/high findings
 mizan scan . --gate critical,high
 
+# Your own policies — .mizan/rules.json (v1 schema):
+# {
+#   "version": 1,
+#   "rules": [
+#     {"id": "custom-no-eval", "severity": "high",
+#      "languages": ["python"], "pattern": "\\beval\\s*\\(",
+#      "message": "eval() is forbidden by policy"}
+#   ]
+# }
+# Custom findings flow through the same gate/baseline pipeline; a broken
+# rules file makes the gate return exit 2 (incomplete) — a scan that
+# could not load its policies never certifies a clean pass.
+
 # Delta scanning — absorb known findings, gate on new ones only
 mizan baseline . --save .mizan/baseline.json
 mizan scan . --gate --baseline .mizan/baseline.json
@@ -88,6 +109,11 @@ mizan ledger "Initial project setup" --actor human
 
 ## Evolution
 
+- **v0.11.0** — Dependency precision & custom policies: correct OSV
+  ecosystems per manifest, honest dev-dependency severity cap,
+  shallow reachability metadata, and `.mizan/rules.json` declarative
+  custom rules with the fail-loud contract (see `docs/ROADMAP.md` for
+  the full competitive-gap plan).
 - **v0.10.0** — Documentation Intelligence: MIZAN audits the docs that
   explain the code, not just the code itself.
 - **v0.9.0** — Precision wave: ‑93.6% false positives on 20 real
@@ -101,4 +127,4 @@ mizan ledger "Initial project setup" --actor human
 
 ## Project status
 
-Version 0.10.0 — Documentation Intelligence: MIZAN now audits the documentation that explains the code, not just the code — broken links and heading anchors (github-slugger-accurate, explicit HTML anchors honored), stale path/symbol references, undocumented API endpoints, docstring coverage WITH a quality bar (`doc-shallow-docstring` catches filler), README command validity, and git-aware change-impact review (`mizan doc-scan`, read-only, precision-first: fenced code examples, pattern vocabulary, output redirections and custom URI schemes are never judged, no network is ever contacted) — independently audited before release: the first build's 75 "broken links" on a real repository were proven to be anchor-algorithm and code-example false positives and corrected to 0 — dogfooding raised MIZAN's own docstring coverage from 58.7% to 100% with zero shallow docstrings — on top of the v0.9.0 precision wave (‑93.6% false positives, 5 new detection rules with positive and negative acceptance tests).
+Version 0.11.0 — Dependency precision & custom policies: MIZAN now queries the right vulnerability ecosystem per manifest (npm, crates.io, Go and Packagist — previously every manifest was queried against PyPI, so real npm/Rust/Go vulnerabilities read as "clean"), caps CRITICAL/HIGH OSV findings on dev-scoped dependencies below the default gate while preserving the original severity, annotates every OSV finding with shallow import-based reachability metadata that never changes a severity ("not-imported" is not "unexploitable"), and adds declarative custom rules via `.mizan/rules.json` — regex rules in MIZAN's zero-dependency style, flowing through the same fingerprint/baseline/gate pipeline as built-in rules, with a fail-loud contract: a broken policies file is reported as an incomplete scan (exit 2), never a silent clean pass. Competitive gaps closed vs. deferred are mapped honestly in `docs/ROADMAP.md`. On top of v0.10.0 Documentation Intelligence (github-slugger-accurate anchors, stale references, docstring coverage with a quality bar — the first build's 75 "broken links" on a real repository were proven false positives and corrected to 0) and the v0.9.0 precision wave (‑93.6% false positives on 20 real repositories, 5 new detection rules).
