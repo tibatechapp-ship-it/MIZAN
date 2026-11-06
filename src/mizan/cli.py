@@ -112,8 +112,12 @@ def save_or_print(content, output=None):
         print(content)
 
 
-def main():
-    """Parse arguments and dispatch the requested MIZAN subcommand."""
+def main(argv=None):
+    """Parse arguments and dispatch the requested MIZAN subcommand.
+
+    ``argv`` (v0.12.0): injectable for tests and embedders — None keeps
+    the historical sys.argv behavior.
+    """
     parser = argparse.ArgumentParser(
         prog="mizan",
         description=(
@@ -335,7 +339,38 @@ def main():
         metavar="N",
     )
 
-    args = parser.parse_args()
+    # NEW: portfolio — aggregate several repositories into ONE
+    # self-contained HTML report (display layer; the gate stays
+    # full-scan --gate).
+    portfolio_cmd = commands.add_parser(
+        "portfolio",
+        help=(
+            "Aggregate full-scan results for MULTIPLE repositories "
+            "into one self-contained HTML report (display layer)"
+        ),
+    )
+    portfolio_cmd.add_argument(
+        "paths", nargs="+", metavar="DIR",
+        help="Two or more repository directories (one or more accepted)",
+    )
+    portfolio_cmd.add_argument(
+        "--output", "-o", default="mizan_portfolio.html",
+        metavar="FILE",
+        help="Where to write the HTML report (default: mizan_portfolio.html)",
+    )
+    portfolio_cmd.add_argument(
+        "--json", action="store_true",
+        help="Print the aggregate JSON instead of writing HTML",
+    )
+    portfolio_cmd.add_argument(
+        "--jobs",
+        type=int,
+        default=4,
+        metavar="N",
+        help="Parallel scanners per repository (default 4)",
+    )
+
+    args = parser.parse_args(argv)
 
     try:
         if args.command == "inspect":
@@ -422,6 +457,22 @@ def main():
                 result, indent=2, ensure_ascii=False
             )
             save_or_print(rendered, args.output)
+
+        elif args.command == "portfolio":
+            from .portfolio import (
+                build_portfolio, portfolio_to_json, render_portfolio_html,
+            )
+            portfolio = build_portfolio(args.paths, jobs=args.jobs)
+            if args.json:
+                print(portfolio_to_json(portfolio))
+            else:
+                save_or_print(render_portfolio_html(portfolio), args.output)
+            # Display layer: a report is produced and shown. Exit 2 only
+            # when NO repository could be scanned at all — a report nobody
+            # can trust is not a report.
+            if portfolio.get("scanned_ok", 0) == 0:
+                return 2
+            return 0
 
         elif args.command == "full-scan":
             from .gate import apply_gate, collect_findings, validate_blocking

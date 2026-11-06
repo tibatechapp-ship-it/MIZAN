@@ -58,7 +58,9 @@ def _cache_ttl():
 
 def _cache_key(ecosystem, name, version):
     raw = f"{ecosystem}|{name}|{version}"
-    return hashlib.sha1(raw.encode("utf-8")).hexdigest()
+    # Non-security use: local OSV cache filename only. usedforsecurity=False
+    # documents that intent and is honored by MIZAN's own weak-crypto rule.
+    return hashlib.sha1(raw.encode("utf-8"), usedforsecurity=False).hexdigest()
 
 
 def _cache_load():

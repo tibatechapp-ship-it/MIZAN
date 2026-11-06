@@ -109,6 +109,11 @@ mizan ledger "Initial project setup" --actor human
 
 ## Evolution
 
+- **v0.12.0** — Portfolio: one local, self-contained HTML report across
+  many repositories (`mizan portfolio <dirs…>`) with gate-fingerprint
+  deduplication — a display layer, explicitly not a GRC platform. Plus
+  OSV cache-key hardening (`usedforsecurity=False`) found by MIZAN's
+  own self-scan.
 - **v0.11.0** — Dependency precision & custom policies: correct OSV
   ecosystems per manifest, honest dev-dependency severity cap,
   shallow reachability metadata, and `.mizan/rules.json` declarative
@@ -127,4 +132,4 @@ mizan ledger "Initial project setup" --actor human
 
 ## Project status
 
-Version 0.11.0 — Dependency precision & custom policies: MIZAN now queries the right vulnerability ecosystem per manifest (npm, crates.io, Go and Packagist — previously every manifest was queried against PyPI, so real npm/Rust/Go vulnerabilities read as "clean"), caps CRITICAL/HIGH OSV findings on dev-scoped dependencies below the default gate while preserving the original severity, annotates every OSV finding with shallow import-based reachability metadata that never changes a severity ("not-imported" is not "unexploitable"), and adds declarative custom rules via `.mizan/rules.json` — regex rules in MIZAN's zero-dependency style, flowing through the same fingerprint/baseline/gate pipeline as built-in rules, with a fail-loud contract: a broken policies file is reported as an incomplete scan (exit 2), never a silent clean pass. Competitive gaps closed vs. deferred are mapped honestly in `docs/ROADMAP.md`. On top of v0.10.0 Documentation Intelligence (github-slugger-accurate anchors, stale references, docstring coverage with a quality bar — the first build's 75 "broken links" on a real repository were proven false positives and corrected to 0) and the v0.9.0 precision wave (‑93.6% false positives on 20 real repositories, 5 new detection rules).
+Version 0.12.0 — Portfolio aggregation: `mizan portfolio <dirs…>` folds full-scan results for multiple repositories into ONE self-contained HTML report (inline CSS, zero scripts, zero external requests) with gate-fingerprint deduplication so the report's numbers are exactly the gate's numbers — a local display layer for governance visibility, explicitly not a GRC platform and not a compliance certification (see `docs/ROADMAP.md`). Field-measured on five real open-source projects (requests, axios, cobra, fd, chalk): 0.5–1.6s per full scan, 20/20 sampled findings verified true positives, zero security false positives in the sample. Plus a self-scan-driven fix: the OSV cache key documents its non-security intent with `usedforsecurity=False`. On top of v0.11.0 dependency precision (correct OSV ecosystem per manifest — npm, crates.io, Go, Packagist — where previously every manifest was queried against PyPI, so real npm/Rust/Go vulnerabilities read as "clean"), the honest dev-dependency severity cap, shallow import-based reachability metadata that never changes a severity, and `.mizan/rules.json` declarative custom rules with the fail-loud contract; and v0.10.0 Documentation Intelligence (github-slugger-accurate anchors, stale references, docstring coverage — the first build's 75 "broken links" on a real repository were proven false positives and corrected to 0) and the v0.9.0 precision wave (‑93.6% false positives on 20 real repositories, 5 new detection rules).
