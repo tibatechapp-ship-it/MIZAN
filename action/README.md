@@ -26,7 +26,7 @@ jobs:
       # the full commit SHA instead so the code you run can never change
       # under your feet:
       #   uses: tibatechapp-ship-it/MIZAN/action@<full-commit-sha>
-      - uses: tibatechapp-ship-it/MIZAN/action@v0.8.3
+      - uses: tibatechapp-ship-it/MIZAN/action@v0.9.0
         with:
           fail-on-findings: "true"
 ```
