@@ -28,11 +28,15 @@ control over what should fail a build and what should stay quiet.
 ## Capabilities
 
 - Repository structure inspection & static source analysis (AST-based).
+- **Documentation Intelligence** — `mizan doc-scan` verifies the docs that
+  explain the code still match reality: broken links and anchors, stale
+  references, undocumented API endpoints, docstring coverage, README
+  command validity, and git-aware change-impact review — read-only.
 - Unified severity gate — `mizan scan --gate critical,high` fails the build
   on blocking findings only.
 - Baseline (delta) scanning — gate ONLY on *new* findings versus
   `.mizan/baseline.json`; kill alert fatigue without hiding regressions.
-- Parallel full-scan — 7 read-only scanners run concurrently (`--jobs N`),
+- Parallel full-scan — 8 read-only scanners run concurrently (`--jobs N`),
   wall time becomes the slowest pass instead of the sum.
 - OSV.dev dependency vulnerability feeds with batched queries, caching and
   offline mode; SARIF 2.1.0 output for GitHub code scanning.
@@ -63,8 +67,12 @@ mizan scan . --gate critical,high
 mizan baseline . --save .mizan/baseline.json
 mizan scan . --gate --baseline .mizan/baseline.json
 
-# Parallel full-scan (7 scanners, one JSON report)
+# Parallel full-scan (8 scanners, one JSON report)
 mizan full-scan . --jobs 4
+
+# Documentation Intelligence — do the docs still match reality?
+mizan doc-scan . --format text
+mizan doc-scan . --format json --output reports/docs.json
 
 # Gate the WHOLE scan (code + CI + git + dependencies) with one threshold
 mizan full-scan . --gate critical,high --baseline .mizan/baseline.json
@@ -80,6 +88,10 @@ mizan ledger "Initial project setup" --actor human
 
 ## Evolution
 
+- **v0.10.0** — Documentation Intelligence: MIZAN audits the docs that
+  explain the code, not just the code itself.
+- **v0.9.0** — Precision wave: ‑93.6% false positives on 20 real
+  repositories, 5 new detection rules with positive/negative tests.
 - **v0.8.x** — Severity gate, baseline delta scanning, parallel full-scan,
   smoother gate UX.
 - **v0.7.0** — Security hardening wave: safe scan/publish CI pipeline,
@@ -89,4 +101,4 @@ mizan ledger "Initial project setup" --actor human
 
 ## Project status
 
-Version 0.9.0 — Precision wave: measured on 20 real repositories (456 findings, ~85% false positives) and rebuilt to 29 (‑93.6%) — test fixtures, vendored bundles and i18n trees are no longer your attack surface, dictionary-value secrets and RegExp `.exec()` no longer fire, and `os.system` no longer confuses itself with `Message.system()` — while FIVE missing detection rules land (unsafe-deserialization, yaml-unsafe-load, sql-injection with value-position precision, path-traversal, weak-crypto), each with positive and negative acceptance tests; the new rules immediately caught real issues the old engine was blind to (a pickle.load deserialization sink, dynamic SQL SET-clause builders) — on top of the v0.8.3 hardening: symlink-proof repair, the `incomplete` (exit 2) gate, OSV error honesty, and the 0/1/2 Action exit-code contract.
+Version 0.10.0 — Documentation Intelligence: MIZAN now audits the documentation that explains the code, not just the code — broken links and heading anchors (github-slugger-accurate, explicit HTML anchors honored), stale path/symbol references, undocumented API endpoints, docstring coverage WITH a quality bar (`doc-shallow-docstring` catches filler), README command validity, and git-aware change-impact review (`mizan doc-scan`, read-only, precision-first: fenced code examples, pattern vocabulary, output redirections and custom URI schemes are never judged, no network is ever contacted) — independently audited before release: the first build's 75 "broken links" on a real repository were proven to be anchor-algorithm and code-example false positives and corrected to 0 — dogfooding raised MIZAN's own docstring coverage from 58.7% to 100% with zero shallow docstrings — on top of the v0.9.0 precision wave (‑93.6% false positives, 5 new detection rules with positive and negative acceptance tests).

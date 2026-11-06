@@ -5,6 +5,7 @@ from .analyzer import IGNORED_DIRS
 
 
 def inspect_repository(directory: str):
+    """Inspect repository structure and return the inspection section."""
     root = Path(directory).expanduser().resolve()
 
     if not root.exists() or not root.is_dir():

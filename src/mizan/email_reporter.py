@@ -4,6 +4,7 @@ import ssl
 from email.message import EmailMessage
 
 def send_email_report():
+    """Send the scan report by email (requires SMTP configuration)."""
     sender_email = os.environ.get("GMAIL_USERNAME")
     app_password = os.environ.get("GMAIL_APP_PASSWORD")
     receiver_email = sender_email # سنرسل لنفس البريد

@@ -359,6 +359,7 @@ def _is_excluded(rel_posix, filename):
 
 
 def iter_source_files(root):
+    """Yield scannable source files under root, skipping excluded trees."""
     for current, dirs, filenames in os.walk(root):
         dirs[:] = sorted(
             name for name in dirs if name not in IGNORED_DIRS
@@ -375,6 +376,7 @@ def iter_source_files(root):
 
 
 def analyze_file(path, root):
+    """Analyze one source file and return its findings."""
     findings = []
 
     try:
@@ -453,6 +455,7 @@ def analyze_file(path, root):
 
 
 def analyze_repository(directory="."):
+    """Analyze a repository directory and return the analyzer section."""
     root = Path(directory).expanduser().resolve()
 
     if not root.is_dir():

@@ -100,6 +100,7 @@ def build_plans(findings_file: str | None = None,
 
 
 def main(argv=None) -> int:
+    """CLI entry point for the interactive secret-removal helper."""
     parser = argparse.ArgumentParser(
         description="MIZAN secret redaction (dry-run by default; "
                     "--apply commits on an isolated branch)"

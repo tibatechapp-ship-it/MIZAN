@@ -6,6 +6,7 @@ from pathlib import Path
 
 
 def add_entry(message: str, actor: str, ledger_path=".mizan/ledger.jsonl"):
+    """Append one decision entry to the engineering ledger."""
     if not message.strip():
         raise ValueError("Entry message cannot be empty.")
 

@@ -9,6 +9,7 @@ from .plugins import PLUGINS
 
 
 def scan_repository(directory=".", category="all"):
+    """Run the unified repository scan and return the scanner section."""
     if category not in {"all", "security", "quality"}:
         raise ValueError(f"Unsupported scan category: {category}")
 

@@ -211,6 +211,7 @@ def build_plans(sarif_file: str | None = None) -> list[Plan]:
 
 
 def main(argv=None) -> int:
+    """CLI entry point: plan and (optionally) apply AI-suggested fixes."""
     parser = argparse.ArgumentParser(
         description="MIZAN AI fixer for B307 (dry-run by default; "
                     "--apply commits on an isolated branch)"

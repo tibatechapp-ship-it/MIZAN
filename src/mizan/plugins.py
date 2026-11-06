@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Plugin:
+    """A built-in scanner plugin registration."""
     name: str
     category: str
     version: str
@@ -45,6 +46,7 @@ PLUGINS = (
 
 
 def list_plugins():
+    """Return metadata for every registered plugin."""
     return [
         {
             "name": plugin.name,
@@ -59,6 +61,7 @@ def list_plugins():
 
 
 def get_plugin(name):
+    """Return metadata for one plugin by name."""
     for plugin in PLUGINS:
         if plugin.name == name:
             return {

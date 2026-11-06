@@ -23,6 +23,7 @@ SECURITY_TERMS = {
 
 
 def git(root, *args):
+    """Run a read-only git command for the risk scanner."""
     result = subprocess.run(
         ["git", "-C", str(root), *args],
         capture_output=True,
@@ -40,6 +41,7 @@ def git(root, *args):
 
 
 def scan_change_risk(directory="."):
+    """Assess the change risk of the working tree (read-only section)."""
     root = Path(directory).expanduser().resolve()
 
     if not root.is_dir():
