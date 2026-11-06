@@ -6,6 +6,8 @@ from pathlib import Path
 
 import yaml
 
+from ._version import __version__
+
 IGNORED_DIRS = {
     ".git", ".venv", "venv", "__pycache__",
     "node_modules", "dist", "build",
@@ -119,7 +121,7 @@ def scan_ci_repository(directory="."):
 
     return {
         "engine": "MIZAN CI/CD Scanner",
-        "version": "0.1.0",
+        "version": __version__,
         "repository": str(root),
         "files_scanned": len(files),
         "findings_count": len(findings),

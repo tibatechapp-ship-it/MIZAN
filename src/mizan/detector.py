@@ -5,6 +5,8 @@ import os
 import re
 from pathlib import Path
 
+from ._version import __version__
+
 IGNORED = {
     ".git", ".venv", "venv", "__pycache__",
     "node_modules", "dist", "build", ".next",
@@ -345,7 +347,7 @@ def detect_project(directory="."):
 
     return {
         "engine": "MIZAN Smart Detector",
-        "version": "0.1.0",
+        "version": __version__,
         "repository": str(root),
         "files_discovered": len(files),
         "scan_limit_reached": truncated,
@@ -355,7 +357,6 @@ def detect_project(directory="."):
         "execution_performed": False,
         "mode": "read-only",
     }
-...
 
 
 def _read_package_lock(path):

@@ -19,6 +19,25 @@ from .risk_scanner import scan_change_risk
 from .dependency_scanner import scan_dependencies
 
 
+def _run_isolated(name, runner, directory):
+    """Run one scanner, turning a crash into a recorded error section.
+
+    One scanner failing (e.g. git scanners outside a Git worktree) must
+    NOT destroy the whole full-scan report — the remaining sections stay
+    useful, and the failure stays visible instead of silent.
+    """
+    try:
+        return runner(directory)
+    except Exception as exc:  # noqa: BLE001 — isolation IS the point
+        return {
+            "engine": f"MIZAN {name}",
+            "error": str(exc),
+            "findings": [],
+            "mode": "read-only",
+            "execution_performed": False,
+        }
+
+
 def full_scan_repository(directory=".", jobs=4):
     """Run all MIZAN Security read-only repository scanners.
 
@@ -26,7 +45,16 @@ def full_scan_repository(directory=".", jobs=4):
     default (``jobs >= 2``) they run concurrently in a thread pool —
     wall time becomes the SLOWEST pass instead of the SUM of all passes.
     ``jobs=1`` restores the strictly sequential execution.
+
+    Review wave (v0.8.2): each scanner is isolated — if one of them
+    cannot run (for example the Git scanners outside a Git repository)
+    its section records ``"error"`` and the rest of the report survives;
+    the failing names are listed under ``"scanners_failed"``.
     """
+    root = Path(directory).expanduser().resolve()
+    if not root.is_dir():
+        raise ValueError(f"Invalid repository directory: {root}")
+
     runners = {
         "analysis": analyze_repository,
         "detection": detect_project,
@@ -41,7 +69,7 @@ def full_scan_repository(directory=".", jobs=4):
     if jobs and jobs > 1:
         with ThreadPoolExecutor(max_workers=jobs) as pool:
             futures = {
-                name: pool.submit(runner, directory)
+                name: pool.submit(_run_isolated, name, runner, directory)
                 for name, runner in runners.items()
             }
             results = {
@@ -49,16 +77,24 @@ def full_scan_repository(directory=".", jobs=4):
                 for name, future in futures.items()
             }
     else:
-        results = {name: runner(directory) for name, runner in runners.items()}
+        results = {
+            name: _run_isolated(name, runner, directory)
+            for name, runner in runners.items()
+        }
     wall_seconds = round(time.perf_counter() - started, 3)
+
+    failed = sorted(
+        name for name, section in results.items() if "error" in section
+    )
 
     return {
         "engine": "MIZAN Security Master Engine",
         "version": __version__,
-        "repository": str(Path(directory).expanduser().resolve()),
+        "repository": str(root),
         "mode": "read-only",
         "execution_performed": False,
         "execution": {"jobs": jobs or 1, "wall_seconds": wall_seconds},
+        "scanners_failed": failed,
         **results,
     }
 
@@ -80,6 +116,11 @@ def main():
             "MIZAN Security — one lightweight, fast engine for code, "
             "secrets, dependencies and CI hardening"
         ),
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"MIZAN Security {__version__}",
     )
 
     commands = parser.add_subparsers(dest="command", required=True)
@@ -171,6 +212,27 @@ def main():
         default=4,
         metavar="N",
         help="Parallel scanners (default 4, use 1 for sequential)",
+    )
+    full_cmd.add_argument(
+        "--gate",
+        nargs="?",
+        const="critical,high",
+        default=None,
+        metavar="SEVERITIES",
+        help=(
+            "Fail (exit 1) when findings from ANY scanner (code, CI, "
+            "git, dependencies) sit at these normalized severities; "
+            "bare --gate defaults to 'critical,high'"
+        ),
+    )
+    full_cmd.add_argument(
+        "--baseline",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Only gate on findings whose fingerprint is NOT in this "
+            "baseline (delta scanning across every scanner)"
+        ),
     )
 
     dependency_cmd = commands.add_parser(
@@ -290,11 +352,15 @@ def main():
                 category=args.category
             )
             if args.gate is not None:
-                from .gate import apply_gate, DEFAULT_BLOCKING
+                from .gate import apply_gate, validate_blocking
                 severities = [
                     s.strip().lower()
                     for s in args.gate.split(",") if s.strip()
-                ] or list(DEFAULT_BLOCKING)
+                ]
+                try:
+                    severities = list(validate_blocking(severities))
+                except ValueError as exc:
+                    parser.error(str(exc))
                 result["gate"] = apply_gate(
                     result.get("findings", []),
                     blocking=severities,
@@ -324,11 +390,31 @@ def main():
             save_or_print(rendered, args.output)
 
         elif args.command == "full-scan":
+            from .gate import apply_gate, collect_findings, validate_blocking
             result = full_scan_repository(args.path, jobs=args.jobs)
+            if args.gate is not None:
+                severities = [
+                    s.strip().lower()
+                    for s in args.gate.split(",") if s.strip()
+                ]
+                try:
+                    severities = list(validate_blocking(severities))
+                except ValueError as exc:
+                    parser.error(str(exc))
+                # Gate across EVERY scanner's findings (code, CI, git,
+                # dependencies/OSV) — not just the code pass. Deduplication
+                # inside apply_gate keeps section overlap from double-counting.
+                result["gate"] = apply_gate(
+                    collect_findings(result),
+                    blocking=severities,
+                    baseline_path=args.baseline,
+                )
             rendered = json.dumps(
                 result, indent=2, ensure_ascii=False
             )
             save_or_print(rendered, args.output)
+            if "gate" in result:
+                return 1 if result["gate"]["decision"] == "fail" else 0
 
         elif args.command == "baseline":
             from .gate import collect_findings, save_baseline

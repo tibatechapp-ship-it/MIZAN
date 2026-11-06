@@ -156,14 +156,14 @@ class SemgrepScannerTests(_CwdTestCase):
 
 
 class CodeQualityTests(_CwdTestCase):
-    def test_default_config_created(self):
+    def test_no_config_is_skipped_not_created(self):
+        """Read-only policy (v0.8.2): missing config => skip cleanly,
+        NEVER write eslint.config.js into the scanned repository."""
         scanner = CodeQualityScanner(target_dir=".")
-        with patch("subprocess.run", return_value=MagicMock(
-                stdout="[]", stderr="", returncode=0)):
-            scanner.run_eslint()
-        self.assertTrue(Path("eslint.config.js").exists())
-        self.assertIn("no-unused-vars",
-                      Path("eslint.config.js").read_text(encoding="utf-8"))
+        ok, results = scanner.run_eslint()
+        self.assertTrue(ok)  # skipped, not failed
+        self.assertEqual(results, [])
+        self.assertFalse(Path("eslint.config.js").exists())
 
     def test_clean_code(self):
         Path("eslint.config.js").write_text("export default [];\n")
