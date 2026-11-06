@@ -5,6 +5,8 @@ import os
 import re
 from pathlib import Path
 
+from ._version import __version__
+
 IGNORED_DIRS = {
     ".git", ".venv", "venv", "__pycache__",
     "node_modules", "dist", "build",
@@ -171,7 +173,7 @@ def analyze_repository(directory="."):
 
     return {
         "engine": "MIZAN AST Analyzer",
-        "version": "0.2.0",
+        "version": __version__,
         "repository": str(root),
         "files_scanned": scanned,
         "findings_count": len(findings),

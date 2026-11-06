@@ -37,4 +37,7 @@ mizan full-scan .
 
 mizan baseline . --save .mizan/baseline.json
 mizan scan . --gate --baseline .mizan/baseline.json
+
+# بوابة واحدة على كل الماسحات (الكود + CI + Git + التبعيات)
+mizan full-scan . --gate critical,high --baseline .mizan/baseline.json
 ```

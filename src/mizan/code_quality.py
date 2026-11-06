@@ -4,29 +4,30 @@ import os
 import sys
 
 class CodeQualityScanner:
+    """ESLint runner for repositories that ALREADY carry an ESLint config.
+
+    Read-only policy (v0.8.2 review): MIZAN never writes into the scanned
+    repository. The previous behaviour generated ``eslint.config.js`` in
+    the target directory when missing — a silent mutation that contradicts
+    the tool's core promise. Without a config, the scan is SKIPPED with a
+    clear warning instead.
+    """
+
     def __init__(self, target_dir="."):
         self.target_dir = target_dir
 
     def run_eslint(self):
         print("⚖️ [MIZAN] بدء فحص جودة الكود باستخدام ESLint...")
-        
-        # إعداد ESLint v9+ (Flat Config)
+
+        # Read-only policy: never create config files inside the scanned
+        # repository. If the project has no ESLint config, skip cleanly.
         eslint_config = os.path.join(self.target_dir, "eslint.config.js")
         if not os.path.exists(eslint_config):
-            default_config = """
-export default [
-    {
-        rules: {
-            "no-unused-vars": "warn",
-            "no-undef": "error",
-            "no-console": "off"
-        }
-    }
-];
-"""
-            with open(eslint_config, 'w') as f:
-                f.write(default_config)
-            print("✅ تم إنشاء ملف إعدادات ESLint الافتراضي (eslint.config.js).")
+            print(
+                "⚠️ [MIZAN] لا يوجد eslint.config.js في المشروع المستهدف — "
+                "تم تخطي فحص الجودة (سياسة القراءة فقط: لا تُنشأ ملفات إعداد)."
+            )
+            return True, []
 
         try:
             result = subprocess.run(

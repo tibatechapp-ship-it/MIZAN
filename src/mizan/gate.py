@@ -113,6 +113,46 @@ def collect_findings(result):
     return collected
 
 
+def validate_blocking(severities):
+    """Validate gate severities against the canonical ladder.
+
+    Accepts any case; returns the normalized lowercase tuple. Raises
+    ``ValueError`` naming the invalid entries — the gate must fail
+    loudly on a typo (``--gate critial``) instead of silently passing
+    the build (fail-open).
+    """
+    normalized = tuple(
+        str(s).strip().lower() for s in severities if str(s).strip()
+    )
+    invalid = [s for s in normalized if s not in SEVERITY_RANK]
+    if invalid:
+        raise ValueError(
+            f"Unknown gate severity: {', '.join(invalid)} "
+            f"(valid: {', '.join(SEVERITY_RANK)})"
+        )
+    if not normalized:
+        return tuple(DEFAULT_BLOCKING)
+    return normalized
+
+
+def dedupe_findings(findings):
+    """Drop duplicate findings (same fingerprint AND severity).
+
+    ``full_scan_repository`` reports the code pass twice (under
+    ``analysis`` and ``scanner`` sections) — the gate must count a
+    finding once, not once per section that saw it.
+    """
+    seen = set()
+    unique = []
+    for finding in findings:
+        key = (fingerprint(finding), normalize_severity(finding.get("severity")))
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(finding)
+    return unique
+
+
 def gate_findings(findings, blocking=DEFAULT_BLOCKING):
     """Split findings into (blocking, allowed) by normalized severity."""
     blocking_list, allowed = [], []
@@ -178,7 +218,10 @@ def apply_gate(findings, blocking=DEFAULT_BLOCKING, baseline_path=None):
     the ``"gate"`` key:
     ``{"decision": "pass"|"fail", "blocking_findings": [...], ...}``.
     """
-    blocking = tuple(blocking) or DEFAULT_BLOCKING
+    # Normalize case ("CRITICAL" == "critical") and refuse typos loudly:
+    # a misspelled threshold would otherwise silently gate nothing.
+    blocking = validate_blocking(blocking)
+    findings = dedupe_findings(findings)
     known_count = 0
     if baseline_path:
         baseline = load_baseline(baseline_path)

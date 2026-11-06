@@ -66,6 +66,10 @@ mizan scan . --gate --baseline .mizan/baseline.json
 # Parallel full-scan (7 scanners, one JSON report)
 mizan full-scan . --jobs 4
 
+# Gate the WHOLE scan (code + CI + git + dependencies) with one threshold
+mizan full-scan . --gate critical,high --baseline .mizan/baseline.json
+
+mizan --version
 mizan ledger "Initial project setup" --actor human
 ```
 
@@ -80,4 +84,4 @@ mizan ledger "Initial project setup" --actor human
 
 ## Project status
 
-Version 0.8.1 — Severity gate (bare `--gate` fix), baseline delta scanning, parallel full-scan engine, verified-fix engine, OSV vulnerability feeds, SARIF output, Ledger accountability log, safe-repair gate.
+Version 0.8.2 — Review wave: scanner error isolation + full-scan gate/baseline (one gate across ALL scanners), fail-closed `--gate` validation, plugin registry sync, unified engine versions, strict read-only ESLint policy — on top of the severity gate, baseline delta scanning, parallel full-scan, verified-fix engine, OSV feeds, SARIF output and Ledger.

@@ -20,6 +20,7 @@ PLUGINS = (
         description="Static security pattern analysis.",
         rules=(
             "dynamic-execution",
+            "process-execution",
             "shell-true",
             "hardcoded-secret-candidate",
         ),
@@ -29,7 +30,11 @@ PLUGINS = (
         category="quality",
         version="0.1.0",
         description="Source code maintenance and quality checks.",
-        rules=("todo",),
+        rules=(
+            "todo",
+            "python-syntax-error",
+            "file-read-error",
+        ),
     ),
 )
 

@@ -3,6 +3,8 @@
 import subprocess
 from pathlib import Path
 
+from ._version import __version__
+
 HIGH_RISK = {
     "pyproject.toml",
     "package.json",
@@ -105,7 +107,7 @@ def scan_change_risk(directory="."):
 
     return {
         "engine": "MIZAN Change Risk Analyzer",
-        "version": "0.2.0",
+        "version": __version__,
         "repository": git_root,
         "changed_files_count": len(changes),
         "changed_files": changes,

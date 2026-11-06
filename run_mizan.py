@@ -1,5 +1,5 @@
-from src.mizan.code_quality import CodeQualityScanner
-from src.mizan.semgrep_scanner import SemgrepScanner
+from mizan.code_quality import CodeQualityScanner
+from mizan.semgrep_scanner import SemgrepScanner
 import sys
 import os
 

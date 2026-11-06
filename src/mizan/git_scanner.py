@@ -3,6 +3,8 @@
 import subprocess
 from pathlib import Path
 
+from ._version import __version__
+
 
 def run_git(root, *args):
     result = subprocess.run(
@@ -61,6 +63,7 @@ def scan_git_repository(directory="."):
 
     return {
         "engine": "MIZAN Git Scanner",
+        "version": __version__,
         "repository": git_root,
         "branch": branch,
         "commit": commit,
