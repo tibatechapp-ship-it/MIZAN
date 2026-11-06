@@ -161,7 +161,9 @@ jobs:
 
       - name: Upload SARIF to GitHub Security
         if: always()
-        continue-on-error: true
+        # v0.12.1: continue-on-error removed — this step runs ONLY in the
+        # trusted push context (job gate) with security-events: write, so
+        # a failed upload is a real failure and must be visible.
         uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
         with:
           sarif_file: |
@@ -170,7 +172,9 @@ jobs:
 
       - name: GitGuardian Secret Scan (trusted context)
         if: always()
-        continue-on-error: true
+        # v0.12.1: continue-on-error removed — the script already skips
+        # cleanly when the key is absent; infrastructure failures (pip,
+        # ggshield install) must now be visible instead of swallowed.
         env:
           GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
         run: |
@@ -184,7 +188,9 @@ jobs:
 
       - name: Send Email Report (trusted context)
         if: always()
-        continue-on-error: true
+        # v0.12.1: continue-on-error removed — the reporter exits 0 when
+        # credentials are not configured (clean skip) and exits 1 on a
+        # real send failure (fail-loud).
         env:
           GMAIL_USERNAME: ${{ secrets.GMAIL_USERNAME }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}

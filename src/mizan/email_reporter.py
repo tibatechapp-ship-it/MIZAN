@@ -1,6 +1,7 @@
 import os
 import smtplib
 import ssl
+import sys
 from email.message import EmailMessage
 
 def send_email_report():
@@ -31,7 +32,11 @@ def send_email_report():
             server.send_message(msg)
         print("✅ تم إرسال تقرير MIZAN إلى بريدك الإلكتروني بنجاح.")
     except Exception as e:
+        # v0.12.1: a real send failure is a REAL failure — exit 1 so the
+        # workflow step fails loudly (the step no longer carries
+        # continue-on-error). Unconfigured credentials still exit 0.
         print(f"❌ فشل إرسال البريد: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     send_email_report()

@@ -82,8 +82,13 @@ class EmailReporterTests(_CwdTestCase):
                "GMAIL_APP_PASSWORD": "p"}
         with patch.dict(os.environ, env, clear=True):
             with patch("smtplib.SMTP_SSL", BoomSMTP):
-                # must not raise
-                email_reporter.send_email_report()
+                # v0.12.1 contract: a real send failure must be LOUD —
+                # the reporter exits 1 (the workflow step no longer
+                # carries continue-on-error). Unconfigured credentials
+                # still exit 0 (clean skip).
+                with self.assertRaises(SystemExit) as cm:
+                    email_reporter.send_email_report()
+                self.assertEqual(cm.exception.code, 1)
 
 
 class SemgrepScannerTests(_CwdTestCase):
