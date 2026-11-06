@@ -69,6 +69,11 @@ mizan full-scan . --jobs 4
 # Gate the WHOLE scan (code + CI + git + dependencies) with one threshold
 mizan full-scan . --gate critical,high --baseline .mizan/baseline.json
 
+# Gate exit codes — the difference between "clean" and "could not verify"
+#   0 = complete scan, no blocking findings
+#   1 = complete scan, blocking findings present
+#   2 = INCOMPLETE scan (a scanner failed, or OSV verification was
+#       impossible / offline with no cache) — never a silent clean pass
 mizan --version
 mizan ledger "Initial project setup" --actor human
 ```
@@ -84,4 +89,4 @@ mizan ledger "Initial project setup" --actor human
 
 ## Project status
 
-Version 0.8.2 — Review wave: scanner error isolation + full-scan gate/baseline (one gate across ALL scanners), fail-closed `--gate` validation, plugin registry sync, unified engine versions, strict read-only ESLint policy — on top of the severity gate, baseline delta scanning, parallel full-scan, verified-fix engine, OSV feeds, SARIF output and Ledger.
+Version 0.8.3 — Hardening wave: symlink-proof repair (writes can never escape the isolated worktree), the gate now answers `incomplete` (exit 2) when scanners fail or OSV verification is impossible — a partial scan never certifies a clean pass, OSV failures are never cached as "no vulnerabilities", full-scan gate now actually evaluates OSV dependency findings, and the GitHub Action honours the 0/1/2 exit-code contract with no `eval` and least-privilege examples — on top of the severity gate, baseline delta scanning, parallel full-scan, verified-fix engine, OSV feeds, SARIF output and Ledger.

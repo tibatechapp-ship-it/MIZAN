@@ -3,7 +3,9 @@
 Every automated modification of scanned code MUST pass through this gate:
 
   1. resolve_target()   — refuse paths outside the scanned worktree
-                          (no absolute paths, no ``..`` traversal).
+                          (no absolute paths, no ``..`` traversal,
+                          no symlinks — a link can point outside the
+                          tree and a write through it would follow).
   2. Plan               — a change is computed up-front as an immutable
                           Plan (file, original, modified, description).
   3. validate           — semantic checks. Python files must compile()
@@ -62,6 +64,11 @@ def resolve_target(raw: str) -> str:
     clean = "/".join(parts)
     if not os.path.exists(clean):
         raise RepairError(f"target does not exist in worktree: {clean!r}")
+    if os.path.islink(clean):
+        raise RepairError(
+            f"refusing symlink path from finding: {clean!r} — a write "
+            "through the link would follow it outside the scanned tree"
+        )
     return clean
 
 
@@ -159,10 +166,27 @@ def apply_repairs(plans: list[Plan], apply: bool = False) -> dict:
     try:
         _run_git(["worktree", "add", "-b", branch, worktree])
         committed_files = []
+        worktree_root = os.path.realpath(worktree)
         for plan in plans:
             target = os.path.join(worktree, plan.file)
             if not os.path.exists(target):
                 print(f"⚠️  [MIZAN] skip (not in HEAD tree): {plan.file}")
+                continue
+            # RW-201 defence in depth: a symlink (even one committed to
+            # HEAD) must never be written through — open() would follow
+            # it and land OUTSIDE the isolated worktree.
+            if os.path.islink(target):
+                print(
+                    f"⚠️  [MIZAN] skip (symlink — refusing to write through "
+                    f"it, may point outside the worktree): {plan.file}"
+                )
+                continue
+            real = os.path.realpath(target)
+            if real != worktree_root and not real.startswith(worktree_root + os.sep):
+                print(
+                    f"⚠️  [MIZAN] skip (resolved path escapes the isolated "
+                    f"worktree): {plan.file}"
+                )
                 continue
             error = validate_python(plan.file, plan.modified)
             if error:

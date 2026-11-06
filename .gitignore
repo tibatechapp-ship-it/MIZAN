@@ -6,7 +6,8 @@ package-lock.json
 .eslintcache
 reports/
 backups/
-.mizan/
+.mizan/*
+!.mizan/baseline.json
 *.egg-info/
 *.sarif
 mizan_report.md

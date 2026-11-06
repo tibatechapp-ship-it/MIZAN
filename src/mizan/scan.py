@@ -9,6 +9,7 @@ from pathlib import Path
 from mizan.detector import collect_files
 from mizan.sarif import build_sarif
 from mizan.vulnerabilities import (
+    OsvScanError,
     check_vulnerabilities_batch,
     parse_dependencies,
 )
@@ -27,7 +28,29 @@ def scan_repository(root):
     checked = check_vulnerabilities_batch(dependencies, use_cache=use_cache)
 
     findings = []
+    osv_errors = []
+    osv_unchecked = []
     for result in checked:
+        source = result.get("source")
+        if source in ("scan-error", "detail-error"):
+            # RW-203: a failed verification is NOT a clean result — surface
+            # it explicitly so CI can distinguish "checked, clean" from
+            # "could not verify" instead of hiding behind zero findings.
+            osv_errors.append({
+                "name": result.get("name", ""),
+                "version": result.get("version", ""),
+                "ecosystem": result.get("ecosystem", ""),
+                "source": source,
+                "error": result.get("error", ""),
+                "vuln_ids": result.get("vuln_ids", []),
+            })
+        elif source == "offline-miss":
+            osv_unchecked.append({
+                "name": result.get("name", ""),
+                "version": result.get("version", ""),
+                "ecosystem": result.get("ecosystem", ""),
+                "source": source,
+            })
         for vuln in result.get("vulns", []):
             dep = {k: v for k, v in result.items()
                    if k in ("name", "version", "ecosystem", "manifest")}
@@ -39,6 +62,8 @@ def scan_repository(root):
         "truncated": truncated,
         "dependencies_checked": len(dependencies),
         "findings": findings,
+        "osv_errors": osv_errors,
+        "osv_unchecked": osv_unchecked,
     }
 
 
@@ -54,7 +79,13 @@ def main(argv=None):
         print(f"error: invalid path: {root}", file=sys.stderr)
         return 2
 
-    result = scan_repository(root)
+    try:
+        result = scan_repository(root)
+    except OsvScanError as exc:
+        # RW-203: an OSV outage must NOT masquerade as exit 1 ("findings")
+        # or 0 ("clean"). It is a scan FAILURE — exit 2, with the reason.
+        print(f"error: OSV vulnerability scan failed: {exc}", file=sys.stderr)
+        return 2
 
     if args.format == "sarif":
         content = build_sarif(result)

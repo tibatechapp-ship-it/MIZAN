@@ -211,12 +211,21 @@ def filter_baseline(findings, baseline):
     return new, len(findings) - len(new)
 
 
-def apply_gate(findings, blocking=DEFAULT_BLOCKING, baseline_path=None):
+def apply_gate(findings, blocking=DEFAULT_BLOCKING, baseline_path=None,
+               incomplete_sources=None):
     """Full gate decision: baseline filtering + severity threshold.
 
     Returns a result dict suitable for embedding in a scan report under
     the ``"gate"`` key:
-    ``{"decision": "pass"|"fail", "blocking_findings": [...], ...}``.
+    ``{"decision": "pass"|"fail"|"incomplete", "blocking_findings": [...], ...}``.
+
+    ``incomplete_sources`` (RW-202): names of scanners / data sources that
+    could not run (e.g. ``scanners_failed`` entries or an OSV outage).
+    A partial scan must never certify a clean pass: blocking findings
+    still decide ``fail`` (stronger signal), otherwise any incomplete
+    source forces ``"incomplete"`` — surfaced with a distinct exit code
+    (2) by the CLI, so CI can distinguish
+    *complete & clean* from *could not fully verify*.
     """
     # Normalize case ("CRITICAL" == "critical") and refuse typos loudly:
     # a misspelled threshold would otherwise silently gate nothing.
@@ -228,6 +237,13 @@ def apply_gate(findings, blocking=DEFAULT_BLOCKING, baseline_path=None):
         findings, known_count = filter_baseline(findings, baseline)
 
     blocking_findings, allowed = gate_findings(findings, blocking=blocking)
+    incomplete = [str(s) for s in (incomplete_sources or []) if str(s).strip()]
+    if blocking_findings:
+        decision = "fail"
+    elif incomplete:
+        decision = "incomplete"
+    else:
+        decision = "pass"
     return {
         "tool": "MIZAN Security",
         "mode": "gate",
@@ -237,5 +253,6 @@ def apply_gate(findings, blocking=DEFAULT_BLOCKING, baseline_path=None):
         "evaluated": len(findings),
         "blocking_count": len(blocking_findings),
         "blocking_findings": blocking_findings,
-        "decision": "fail" if blocking_findings else "pass",
+        "incomplete_sources": incomplete,
+        "decision": decision,
     }

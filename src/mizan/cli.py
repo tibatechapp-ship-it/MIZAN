@@ -361,10 +361,18 @@ def main():
                     severities = list(validate_blocking(severities))
                 except ValueError as exc:
                     parser.error(str(exc))
+                # RW-202/203: dependency verification that could not complete
+                # (OSV outage or offline cache miss) is not a clean result.
+                incomplete = []
+                if result.get("osv_errors"):
+                    incomplete.append("osv")
+                if result.get("osv_unchecked"):
+                    incomplete.append("osv-offline")
                 result["gate"] = apply_gate(
                     result.get("findings", []),
                     blocking=severities,
                     baseline_path=args.baseline,
+                    incomplete_sources=incomplete,
                 )
             if args.format == "html":
                 rendered = render_html(result)
@@ -374,7 +382,12 @@ def main():
                 )
             save_or_print(rendered, args.output)
             if "gate" in result:
-                return 1 if result["gate"]["decision"] == "fail" else 0
+                decision = result["gate"]["decision"]
+                if decision == "fail":
+                    return 1
+                if decision == "incomplete":
+                    return 2
+                return 0
 
         elif args.command == "git-scan":
             result = scan_git_repository(args.path)
@@ -404,17 +417,33 @@ def main():
                 # Gate across EVERY scanner's findings (code, CI, git,
                 # dependencies/OSV) — not just the code pass. Deduplication
                 # inside apply_gate keeps section overlap from double-counting.
+                # RW-202: a PARTIAL scan must never certify a clean pass —
+                # failed scanners and unverifiable OSV deps force the
+                # "incomplete" decision (exit 2), still overridden by real
+                # blocking findings (exit 1).
+                incomplete = list(result.get("scanners_failed") or [])
+                deps = result.get("dependencies") or {}
+                if deps.get("osv_errors"):
+                    incomplete.append("osv")
+                if deps.get("osv_unchecked"):
+                    incomplete.append("osv-offline")
                 result["gate"] = apply_gate(
                     collect_findings(result),
                     blocking=severities,
                     baseline_path=args.baseline,
+                    incomplete_sources=incomplete,
                 )
             rendered = json.dumps(
                 result, indent=2, ensure_ascii=False
             )
             save_or_print(rendered, args.output)
             if "gate" in result:
-                return 1 if result["gate"]["decision"] == "fail" else 0
+                decision = result["gate"]["decision"]
+                if decision == "fail":
+                    return 1
+                if decision == "incomplete":
+                    return 2
+                return 0
 
         elif args.command == "baseline":
             from .gate import collect_findings, save_baseline
