@@ -4,6 +4,7 @@ import sys
 import os
 
 def main():
+    """Console entry point for the bundled MIZAN runner."""
     print("========================================")
     print("       ⚖️  نظام MIZAN Security للتحليل الشامل       ")
     print("========================================\n")

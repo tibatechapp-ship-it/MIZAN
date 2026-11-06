@@ -15,6 +15,7 @@ from mizan.scan import scan_repository
 
 @dataclass
 class FixPlan:
+    """A proposed safe upgrade, pending validation and approval."""
     manifest: str
     package: str
     ecosystem: str
@@ -26,6 +27,7 @@ class FixPlan:
 
 @dataclass
 class FixResult:
+    """The outcome of one applied fix attempt."""
     applied: list = field(default_factory=list)
     rolled_back: list = field(default_factory=list)
     skipped: list = field(default_factory=list)
@@ -362,6 +364,7 @@ def apply_fixes(root, plans, validate=True):
 # ----- CLI -----
 
 def main(argv=None):
+    """CLI entry point: plan or apply validated dependency fixes."""
     parser = argparse.ArgumentParser(prog="mizan fix")
     parser.add_argument("path", nargs="?", default=".")
     parser.add_argument(

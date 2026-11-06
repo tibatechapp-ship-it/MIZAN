@@ -3,6 +3,8 @@ import json
 import os
 
 class SemgrepScanner:
+    """Optional multi-language bridge to Bandit/Semgrep when installed."""
+
     def __init__(self, target_dir="."):
         self.target_dir = target_dir
 

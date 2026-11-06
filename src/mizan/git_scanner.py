@@ -7,6 +7,7 @@ from ._version import __version__
 
 
 def run_git(root, *args):
+    """Run a read-only git command and return its stdout."""
     result = subprocess.run(
         ["git", "-C", str(root), *args],
         capture_output=True,
@@ -24,6 +25,7 @@ def run_git(root, *args):
 
 
 def scan_git_repository(directory="."):
+    """Inspect the Git history and state (read-only section)."""
     root = Path(directory).expanduser().resolve()
 
     if not root.is_dir():

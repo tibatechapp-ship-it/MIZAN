@@ -15,6 +15,7 @@ IGNORED_DIRS = {
 }
 
 def find_ci_files(root):
+    """Locate CI configuration files in the repository."""
     for current, dirs, filenames in os.walk(root):
         dirs[:] = sorted(
             d for d in dirs if d not in IGNORED_DIRS
@@ -32,6 +33,7 @@ def find_ci_files(root):
 
 
 def inspect_ci_file(path, root):
+    """Inspect one CI configuration file and return its findings."""
     findings = []
     relative = path.relative_to(root).as_posix()
 
@@ -108,6 +110,7 @@ def inspect_ci_file(path, root):
 
 
 def scan_ci_repository(directory="."):
+    """Scan the repository's CI configuration (read-only section)."""
     root = Path(directory).expanduser().resolve()
 
     if not root.is_dir():

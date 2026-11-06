@@ -17,6 +17,7 @@ from .git_scanner import scan_git_repository
 from .ci_scanner import scan_ci_repository
 from .risk_scanner import scan_change_risk
 from .dependency_scanner import scan_dependencies
+from .doc_intel import scan_documentation_repository, render_doc_intel_text
 
 
 def _run_isolated(name, runner, directory):
@@ -63,6 +64,7 @@ def full_scan_repository(directory=".", jobs=4):
         "ci": scan_ci_repository,
         "dependencies": scan_dependencies,
         "change_risk": scan_change_risk,
+        "documentation": scan_documentation_repository,
     }
 
     started = time.perf_counter()
@@ -100,6 +102,7 @@ def full_scan_repository(directory=".", jobs=4):
 
 
 def save_or_print(content, output=None):
+    """Write the rendered report to a file or print it to stdout."""
     if output:
         path = Path(output)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -110,6 +113,7 @@ def save_or_print(content, output=None):
 
 
 def main():
+    """Parse arguments and dispatch the requested MIZAN subcommand."""
     parser = argparse.ArgumentParser(
         prog="mizan",
         description=(
@@ -248,6 +252,19 @@ def main():
     )
     risk_cmd.add_argument("path", nargs="?", default=".")
     risk_cmd.add_argument("--output", default=None)
+
+    doc_cmd = commands.add_parser(
+        "doc-scan",
+        help=(
+            "Documentation Intelligence: verify docs match reality "
+            "(links, stale references, coverage, endpoints, README)"
+        ),
+    )
+    doc_cmd.add_argument("path", nargs="?", default=".")
+    doc_cmd.add_argument(
+        "--format", choices=["json", "text"], default="json"
+    )
+    doc_cmd.add_argument("--output", default=None)
 
     ledger_cmd = commands.add_parser("ledger")
     ledger_cmd.add_argument("message")
@@ -470,6 +487,16 @@ def main():
             rendered = json.dumps(
                 result, indent=2, ensure_ascii=False
             )
+            save_or_print(rendered, args.output)
+
+        elif args.command == "doc-scan":
+            result = scan_documentation_repository(args.path)
+            if args.format == "text":
+                rendered = render_doc_intel_text(result)
+            else:
+                rendered = json.dumps(
+                    result, indent=2, ensure_ascii=False
+                )
             save_or_print(rendered, args.output)
 
         elif args.command == "ledger":

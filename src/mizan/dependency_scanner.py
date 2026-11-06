@@ -28,6 +28,7 @@ MANIFESTS = {
 
 
 def parse_requirements(path):
+    """Parse a requirements*.txt file into dependency records."""
     dependencies = []
 
     for line in path.read_text(
@@ -53,6 +54,7 @@ def parse_requirements(path):
 
 
 def parse_manifest(path):
+    """Parse a dependency manifest into dependency records."""
     name = path.name
 
     if name == "requirements.txt":
@@ -163,6 +165,7 @@ def parse_manifest(path):
 
 
 def scan_dependencies(directory="."):
+    """Scan dependency manifests and return the dependencies section."""
     root = Path(directory).expanduser().resolve()
 
     if not root.is_dir():

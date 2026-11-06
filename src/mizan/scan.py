@@ -68,6 +68,7 @@ def scan_repository(root):
 
 
 def main(argv=None):
+    """CLI entry point for the vulnerability (OSV) scanner."""
     parser = argparse.ArgumentParser(prog="mizan scan")
     parser.add_argument("path", nargs="?", default=".", help="Repository root")
     parser.add_argument("--format", choices=["sarif", "json"], default="sarif")
