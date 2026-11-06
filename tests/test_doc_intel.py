@@ -747,8 +747,17 @@ class DocIntelAuditWaveTests(unittest.TestCase):
                 shallow_dir = base / "shallow"
                 subprocess.run(
                     ["git", "clone", "-q", "--depth", "1",
-                     str(full), str(shallow_dir)],
+                     f"file://{full}", str(shallow_dir)],
                     capture_output=True, text=True, check=True,
+                )
+                # precondition lock: --depth is silently IGNORED in local
+                # path clones (git advises file://) — a plain-path clone
+                # here yields FULL history, doc_time < commit_time, and
+                # the test then flakes whenever its two commits straddle
+                # a wall-clock second (CI Python 3.13 run #94 hit that).
+                self.assertTrue(
+                    (shallow_dir / ".git" / "shallow").exists(),
+                    "test precondition: clone must actually be shallow",
                 )
                 section = scan_documentation_repository(str(shallow_dir))
                 self.assertTrue(
