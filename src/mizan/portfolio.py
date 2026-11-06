@@ -268,6 +268,11 @@ def render_portfolio_html(portfolio):
     top_rows = []
     for repo in portfolio.get("repos", []):
         for f in repo.get("top_findings", []):
+            # Pre-3.12 f-strings cannot nest the outer quote inside the
+            # expression — build the location string outside the template.
+            loc = esc(f["file"])
+            if f.get("line"):
+                loc += " : " + str(f["line"])
             top_rows.append(
                 "<tr>"
                 f'<td><span class="chip {esc(f["severity"])}">'
@@ -275,8 +280,7 @@ def render_portfolio_html(portfolio):
                 f"<td>{esc(repo.get('name', ''))}</td>"
                 f"<td>{esc(f['section'])}</td>"
                 f"<td>{esc(f['rule'])}</td>"
-                f"<td>{esc(f['file'])}"
-                f'{f" : {f['line']}" if f.get("line") else ""}</td>'
+                f"<td>{loc}</td>"
                 f"<td>{esc(f['message'])}</td>"
                 "</tr>"
             )
