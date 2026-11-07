@@ -198,10 +198,18 @@ class PythonSecurityVisitor(ast.NodeVisitor):
             name = node.func.attr
 
         if name in {"eval", "exec"}:
-            self.add(
-                node, "dynamic-execution", "high",
-                "Dynamic code execution detected."
-            )
+            # v0.12.3 — bare-call boundary on the Python AST path too.
+            # The v0.9.0 JS/TS fix required a bare call boundary for the
+            # same reason: a receiver call (PyTorch Module.eval(),
+            # sqlite exec, ...) is a method on an object, not the
+            # eval()/exec() builtins. The 100-repo field benchmark
+            # caught AutoModel.from_pretrained(...).eval() flagged as
+            # dynamic code execution in a real repository.
+            if isinstance(node.func, ast.Name):
+                self.add(
+                    node, "dynamic-execution", "high",
+                    "Dynamic code execution detected."
+                )
 
         # v0.9.0 P0: os.system / os.popen only — Message.system(...) and
         # platform.system() are not command execution.

@@ -187,17 +187,24 @@ display layer for governance visibility, explicitly not a GRC platform.
 
 ## Project status
 
-**Current release: Version 0.12.2** — calibrated in the field on 100 real
+**Current release: Version 0.12.3** — calibrated in the field on 100 real
 open-source repositories (zai-org first, then the newest November 2026
 projects): median scan time 1.04 s, zero crashes, zero timeouts — and the
-wave exposed two real defects that are now fixed: OSV batch queries are
+wave exposed three real defects that are now fixed: OSV batch queries are
 chunked (a 1024-dependency monorepo used to fail deterministically on HTTP
-400) and the 0/1/2 exit contract now holds without `--gate` too. 410 tests
+400), the 0/1/2 exit contract now holds without `--gate` too, and the
+`dynamic-execution` rule no longer flags receiver calls like PyTorch's
+`Module.eval()` (a hand-audited semantic false positive). 414 tests
 green, zero actionable self-scan findings, and the README you are reading
 passes MIZAN's own Documentation Intelligence.
 
 ## Evolution
 
+- **v0.12.3** — dynamic-execution bare-call boundary extended to the
+  Python AST path: receiver calls (`Module.eval()`, `cursor.exec(...)`)
+  are object methods, not the `eval()`/`exec()` builtins. Found by the
+  manual audit of the 100-repo field wave (PyTorch inference mode flagged
+  as dynamic code execution); verified fixed on the real repository.
 - **v0.12.2** — Field calibration on 100 real repositories (zai-org first):
   median 1.04 s per scan, zero crashes. Fixed: OSV `querybatch` now chunks
   (≤100 queries), retries transient errors, and degrades per-chunk — a

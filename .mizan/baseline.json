@@ -1,40 +1,154 @@
 {
   "schema": "mizan-baseline/1",
   "tool": "MIZAN Security",
-  "version": "0.9.0",
-  "created_at": "2026-11-06T11:42:51Z",
-  "count": 5,
-  "note": "v0.9.0 precision wave — post-fix regen",
+  "version": "0.12.3",
+  "created_at": "2026-11-07T20:25:49Z",
+  "count": 24,
+  "note": "v0.12.3 wave — post-fix regen",
   "fingerprints": {
-    "84124f316e39714d": {
-      "rule": "weak-crypto",
-      "file": "src/mizan/vulnerabilities.py",
-      "line": 61,
-      "severity": "medium"
-    },
-    "f161f2a10693238b": {
-      "rule": "continue-on-error",
-      "file": ".github/workflows/mizan-scan.yml",
-      "line": 164,
-      "severity": "medium"
-    },
-    "03831181ef0420e0": {
-      "rule": "continue-on-error",
-      "file": ".github/workflows/mizan-scan.yml",
-      "line": 173,
-      "severity": "medium"
-    },
-    "9b7955506d7438e4": {
-      "rule": "continue-on-error",
-      "file": ".github/workflows/mizan-scan.yml",
-      "line": 187,
-      "severity": "medium"
-    },
     "c69baa420d342498": {
       "rule": "critical-component-changed",
       "file": "package.json",
       "line": 0,
       "severity": "high"
+    },
+    "682dee27cbf96bcc": {
+      "rule": "doc-missing-docstring",
+      "file": "src/mizan/portfolio.py",
+      "line": 367,
+      "severity": "info"
+    },
+    "dd158aa523a7aa35": {
+      "rule": "doc-orphan-code",
+      "file": "eslint.config.js",
+      "line": 0,
+      "severity": "info"
+    },
+    "0e9f379255d32135": {
+      "rule": "doc-orphan-code",
+      "file": "run_mizan.py",
+      "line": 0,
+      "severity": "info"
+    },
+    "9e056e10bb1dba8b": {
+      "rule": "doc-orphan-code",
+      "file": "src/mizan/ai_fixer.py",
+      "line": 0,
+      "severity": "info"
+    },
+    "0e918d969fb8c0d4": {
+      "rule": "doc-orphan-code",
+      "file": "src/mizan/analyzer.py",
+      "line": 0,
+      "severity": "info"
+    },
+    "626e2bd39965360f": {
+      "rule": "doc-orphan-code",
+      "file": "src/mizan/approval.py",
+      "line": 0,
+      "severity": "info"
+    },
+    "597b4ef53294a742": {
+      "rule": "doc-orphan-code",
+      "file": "src/mizan/ci_scanner.py",
+      "line": 0,
+      "severity": "info"
+    },
+    "ebe590db68da0e27": {
+      "rule": "doc-orphan-code",
+      "file": "src/mizan/cli.py",
+      "line": 0,
+      "severity": "info"
+    },
+    "185364e3dead27ef": {
+      "rule": "doc-orphan-code",
+      "file": "src/mizan/code_quality.py",
+      "line": 0,
+      "severity": "info"
+    },
+    "7e81a35ef38f69fe": {
+      "rule": "doc-orphan-code",
+      "file": "src/mizan/dependency_scanner.py",
+      "line": 0,
+      "severity": "info"
+    },
+    "875eb2f41342212c": {
+      "rule": "doc-orphan-code",
+      "file": "src/mizan/detector.py",
+      "line": 0,
+      "severity": "info"
+    },
+    "cf309a2edbdd46d4": {
+      "rule": "doc-orphan-code",
+      "file": "src/mizan/doc_intel.py",
+      "line": 0,
+      "severity": "info"
+    },
+    "44e5df09ab077e8a": {
+      "rule": "doc-orphan-code",
+      "file": "src/mizan/email_reporter.py",
+      "line": 0,
+      "severity": "info"
+    },
+    "ef1f9bea7f60868b": {
+      "rule": "doc-orphan-code",
+      "file": "src/mizan/fix.py",
+      "line": 0,
+      "severity": "info"
+    },
+    "57a298d52e57f4b7": {
+      "rule": "doc-orphan-code",
+      "file": "src/mizan/gate.py",
+      "line": 0,
+      "severity": "info"
+    },
+    "fb191e7c2ae76db2": {
+      "rule": "doc-orphan-code",
+      "file": "src/mizan/git_scanner.py",
+      "line": 0,
+      "severity": "info"
+    },
+    "1be4621ebeb01aeb": {
+      "rule": "doc-orphan-code",
+      "file": "src/mizan/inspector.py",
+      "line": 0,
+      "severity": "info"
+    },
+    "a871130cea75a3e3": {
+      "rule": "doc-orphan-code",
+      "file": "src/mizan/ledger.py",
+      "line": 0,
+      "severity": "info"
+    },
+    "ed097de9acc11566": {
+      "rule": "doc-orphan-code",
+      "file": "src/mizan/plugins.py",
+      "line": 0,
+      "severity": "info"
+    },
+    "317beb3bc2bde3cb": {
+      "rule": "doc-orphan-code",
+      "file": "src/mizan/repair.py",
+      "line": 0,
+      "severity": "info"
+    },
+    "e55d36015740e716": {
+      "rule": "doc-orphan-code",
+      "file": "src/mizan/risk_scanner.py",
+      "line": 0,
+      "severity": "info"
+    },
+    "d01c2d45fe4e84aa": {
+      "rule": "doc-stale-reference",
+      "file": "CHANGELOG.md",
+      "line": 21,
+      "severity": "medium"
+    },
+    "54ebe12a32590959": {
+      "rule": "doc-stale-reference",
+      "file": "CHANGELOG.md",
+      "line": 22,
+      "severity": "medium"
     }
   }
 }

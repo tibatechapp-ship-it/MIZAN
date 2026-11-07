@@ -7,7 +7,9 @@ Covers the two weaknesses the 100-repo field benchmark exposed:
      violating the documented 0/1/2 exit contract.
 """
 import json
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from mizan import cli
@@ -171,6 +173,69 @@ class ExitContractTests(unittest.TestCase):
         with patch.object(cli, "scan_repository", fake_scan):
             rc = cli.main(["scan", "."])
         self.assertEqual(rc, 0)
+
+
+class EvalBoundaryTests(unittest.TestCase):
+    """v0.12.3 — dynamic-execution bare-call boundary on the Python AST
+    path, mirroring the v0.9.0 JS/TS fix.
+
+    Field evidence: zai-org/CogAgent — AutoModel.from_pretrained(...).eval()
+    (PyTorch inference mode) was flagged as dynamic code execution.
+    A receiver call is a method, not the eval()/exec() builtins.
+    """
+
+    @staticmethod
+    def _dynamic_executions(files):
+        from mizan.analyzer import analyze_repository
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for rel, content in files.items():
+                target = root / rel
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(content, encoding="utf-8")
+            return [
+                f for f in analyze_repository(str(root))["findings"]
+                if f.get("rule") == "dynamic-execution"
+            ]
+
+    def test_receiver_eval_not_flagged(self):
+        hits = self._dynamic_executions({
+            "demo.py": (
+                "import torch\n"
+                "model = torch.nn.Linear(2, 2)\n"
+                "model.eval()\n"
+            ),
+        })
+        self.assertEqual(hits, [])
+
+    def test_multiline_receiver_eval_not_flagged(self):
+        # The real CogAgent shape: the call expression starts on an
+        # earlier line than .eval() — the flagged line was the chain start.
+        hits = self._dynamic_executions({
+            "app/openai_demo.py": (
+                "from transformers import AutoModel\n"
+                "model = AutoModel.from_pretrained(\n"
+                "    'model_path',\n"
+                "    trust_remote_code=True,\n"
+                "    device_map='auto',\n"
+                ").eval()\n"
+            ),
+        })
+        self.assertEqual(hits, [])
+
+    def test_bare_eval_still_flagged(self):
+        hits = self._dynamic_executions({
+            "risky.py": "payload = '1+1'\nresult = eval(payload)\n",
+        })
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0]["severity"], "high")
+
+    def test_bare_exec_still_flagged(self):
+        hits = self._dynamic_executions({
+            "risky.py": "program = 'print(1)'\nexec(program)\n",
+        })
+        self.assertEqual(len(hits), 1)
 
 
 if __name__ == "__main__":
