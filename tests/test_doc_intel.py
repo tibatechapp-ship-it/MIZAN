@@ -393,7 +393,7 @@ class DocIntelNegativeTests(unittest.TestCase):
             )
 
     def test_em_dash_heading_and_explicit_html_anchor(self):
-        """Audited FP: ``#### \`agent/request\` — waterfall`` has GitHub
+        r"""Audited FP: ``#### \`agent/request\` — waterfall`` has GitHub
         slug ``agentrequest--waterfall`` (em-dash removed, spaces NOT
         collapsed), and an explicit ``<a id=...>`` anchor is valid by
         construction. Neither may be reported broken."""
