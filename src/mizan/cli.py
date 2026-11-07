@@ -444,6 +444,11 @@ def main(argv=None):
                 if decision == "incomplete":
                     return 2
                 return 0
+            # Exit contract without --gate: unloadable custom policies make
+            # the scan incomplete — never a silent clean pass.
+            if result.get("custom_rules_errors"):
+                return 2
+            return 0
 
         elif args.command == "git-scan":
             result = scan_git_repository(args.path)
@@ -522,6 +527,23 @@ def main(argv=None):
                 if decision == "incomplete":
                     return 2
                 return 0
+            # Documented exit contract (README): exit 2 = INCOMPLETE scan —
+            # a scanner failed, OSV verification was impossible, or custom
+            # policies could not load. This holds WITHOUT --gate too: a
+            # report-only run must never present a happy exit 0 for an
+            # incomplete scan ("never a silent clean pass").
+            incomplete_sources = list(result.get("scanners_failed") or [])
+            deps = result.get("dependencies") or {}
+            if deps.get("osv_errors"):
+                incomplete_sources.append("osv")
+            if deps.get("osv_unchecked"):
+                incomplete_sources.append("osv-offline")
+            analysis = result.get("analysis") or {}
+            if analysis.get("custom_rules_errors"):
+                incomplete_sources.append("custom-rules")
+            if incomplete_sources:
+                return 2
+            return 0
 
         elif args.command == "baseline":
             from .gate import collect_findings, save_baseline

@@ -27,6 +27,12 @@ from mizan.detector import (
 OSV_API_URL = "https://api.osv.dev/v1/query"
 OSV_BATCH_URL = "https://api.osv.dev/v1/querybatch"
 OSV_TIMEOUT = 15
+# OSV rejects oversized querybatch payloads with HTTP 400 (field-proven:
+# a 1024-dependency monorepo failed while subsets passed). Keep every
+# round-trip comfortably under that ceiling.
+OSV_BATCH_CHUNK = 100
+OSV_MAX_ATTEMPTS = 3
+_OSV_RETRY_SLEEP = 0.6
 
 CACHE_DIR = ".mizan"
 CACHE_FILE = "osv-cache.json"
@@ -165,7 +171,7 @@ def check_vulnerabilities(name, version, ecosystem):
 
 
 def check_vulnerabilities_batch(packages, offline=None, use_cache=True):
-    """Check many packages with ONE batch round-trip + cached hits.
+    """Check many packages with batched round-trips (≤100 queries each).
 
     ``packages`` is a list of ``{name, version, ecosystem}`` dicts.
     Returns a list aligned with the input order; each item adds
@@ -213,44 +219,72 @@ def check_vulnerabilities_batch(packages, offline=None, use_cache=True):
                 }
                 for idx in misses
             ]
-            try:
-                data = _post_json(OSV_BATCH_URL, {"queries": queries})
-            except (urllib.error.URLError, OSError, json.JSONDecodeError) as exc:
-                raise OsvScanError(f"OSV batch query failed: {exc}") from exc
-
-            # NOTE: absence of the "results" key (older mirrors, mocks of the
-            # single-query endpoint) must fall back — but a REAL empty batch
-            # reply is a list and means "all clean".
-            batch_results = data.get("results") if isinstance(data, dict) else None
-
-            if not isinstance(batch_results, list):
-                # No valid batch payload (older mirror/proxy/mock): fall back
-                # to sequential single queries so behaviour stays correct.
-                for idx in misses:
-                    pkg = packages[idx]
+            # Field-proven (100-repo benchmark, 2026-11): OSV ``querybatch``
+            # rejects oversized payloads with HTTP 400 — a real monorepo
+            # with 1024 transitive dependencies failed deterministically
+            # while subsets passed. Chunk every round-trip, retry
+            # transient errors, and degrade ONE failing chunk to
+            # per-item queries instead of failing the whole scan.
+            for c_start in range(0, len(misses), OSV_BATCH_CHUNK):
+                chunk_positions = range(
+                    c_start, min(c_start + OSV_BATCH_CHUNK, len(misses)))
+                chunk_payload = {
+                    "queries": [queries[p] for p in chunk_positions]
+                }
+                data = None
+                last_exc = None
+                for attempt in range(OSV_MAX_ATTEMPTS):
                     try:
-                        vulns = check_vulnerabilities(
-                            pkg.get("name", ""), pkg.get("version", ""),
-                            pkg.get("ecosystem", "PyPI"),
-                        )
-                    except OsvScanError as exc:
-                        # RW-203: a failed query is NOT a clean result. Record
-                        # the failure explicitly and never cache an empty list
-                        # that would make a network outage look like
-                        # "no vulnerabilities" on every later run.
+                        data = _post_json(OSV_BATCH_URL, chunk_payload)
+                        last_exc = None
+                        break
+                    except (urllib.error.HTTPError, urllib.error.URLError,
+                            OSError, json.JSONDecodeError) as exc:
+                        last_exc = exc
+                        if attempt + 1 < OSV_MAX_ATTEMPTS:
+                            time.sleep(_OSV_RETRY_SLEEP)
+
+                batch_results = None
+                if last_exc is None:
+                    batch_results = (
+                        data.get("results") if isinstance(data, dict) else None)
+
+                if not isinstance(batch_results, list):
+                    # This chunk failed after retries (or the mirror/mock
+                    # replied without a valid payload): fall back to
+                    # sequential single queries for THIS chunk only —
+                    # other chunks stay batched.
+                    for pos in chunk_positions:
+                        idx = misses[pos]
+                        pkg = packages[idx]
+                        try:
+                            vulns = check_vulnerabilities(
+                                pkg.get("name", ""), pkg.get("version", ""),
+                                pkg.get("ecosystem", "PyPI"),
+                            )
+                        except OsvScanError as exc:
+                            # RW-203: a failed query is NOT a clean result.
+                            # Record the failure explicitly and never cache
+                            # an empty list that would make an outage look
+                            # like "no vulnerabilities" on every later run.
+                            results[idx] = {
+                                **pkg, "vulns": [],
+                                "source": "scan-error",
+                                "error": str(exc),
+                            }
+                            continue
                         results[idx] = {
-                            **pkg, "vulns": [],
-                            "source": "scan-error",
-                            "error": str(exc),
+                            **pkg, "vulns": vulns, "source": "single-fallback",
                         }
-                        continue
-                    results[idx] = {**pkg, "vulns": vulns, "source": "single-fallback"}
-                    if use_cache:
-                        _cache_put(cache, pkg.get("ecosystem", "PyPI"),
-                                   pkg.get("name", ""), pkg.get("version", ""), vulns)
-            else:
-                for pos, idx in enumerate(misses):
-                    entry = batch_results[pos] if pos < len(batch_results) else {}
+                        if use_cache:
+                            _cache_put(cache, pkg.get("ecosystem", "PyPI"),
+                                       pkg.get("name", ""), pkg.get("version", ""), vulns)
+                    continue
+
+                for pos_in_chunk, pos in enumerate(chunk_positions):
+                    idx = misses[pos]
+                    entry = (batch_results[pos_in_chunk]
+                             if pos_in_chunk < len(batch_results) else {})
                     vuln_ids = entry.get("vuln_ids", []) if isinstance(entry, dict) else []
                     pkg = packages[idx]
                     if not vuln_ids:

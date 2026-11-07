@@ -80,7 +80,8 @@ not aspirational marketing.
 | False-positive reduction vs prior wave, 20 real repositories | **−93.6%** | v0.9.0 precision wave |
 | Sampled findings verified true positives | **20/20**, zero security FPs | v0.12.0 field notes |
 | MIZAN scanning its own repository | **0 actionable findings** across all scanners | v0.12.1+, strict `--gate` |
-| Test suite | **402 tests green**, Python 3.10–3.14 | CI, every push |
+| Field benchmark — 100 real open-source repos (zai-org first, Nov 2026) | **median 1.04 s / repo**, 0 crashes, 0 timeouts | v0.12.2 field wave |
+| Test suite | **410 tests green**, Python 3.10–3.14 | CI, every push |
 | Trusted CI steps that can hide a failure | **0** (`continue-on-error` removed) | v0.12.1 |
 
 ## Quickstart
@@ -186,14 +187,23 @@ display layer for governance visibility, explicitly not a GRC platform.
 
 ## Project status
 
-**Current release: Version 0.12.1** — fail-loud CI everywhere (the three
-trusted-workflow steps no longer carry `continue-on-error`; SARIF upload was
-silently broken since project birth and is now fixed), zero actionable
-self-scan findings across every scanner, and the README you are reading
+**Current release: Version 0.12.2** — calibrated in the field on 100 real
+open-source repositories (zai-org first, then the newest November 2026
+projects): median scan time 1.04 s, zero crashes, zero timeouts — and the
+wave exposed two real defects that are now fixed: OSV batch queries are
+chunked (a 1024-dependency monorepo used to fail deterministically on HTTP
+400) and the 0/1/2 exit contract now holds without `--gate` too. 410 tests
+green, zero actionable self-scan findings, and the README you are reading
 passes MIZAN's own Documentation Intelligence.
 
 ## Evolution
 
+- **v0.12.2** — Field calibration on 100 real repositories (zai-org first):
+  median 1.04 s per scan, zero crashes. Fixed: OSV `querybatch` now chunks
+  (≤100 queries), retries transient errors, and degrades per-chunk — a
+  1024-dependency monorepo used to fail the whole dependency scan with HTTP
+  400; and the 0/1/2 exit contract holds without `--gate` (an incomplete
+  scan can no longer exit 0).
 - **v0.12.1** — Fail-loud CI: the three trusted-workflow steps no longer
   swallow real failures (`continue-on-error` removed; the email reporter
   exits 1 on a real send failure). Self-scan reports zero actionable
