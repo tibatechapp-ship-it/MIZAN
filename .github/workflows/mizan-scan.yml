@@ -73,10 +73,15 @@ jobs:
           npm install --no-save eslint
 
       # إنشاء الملفات أولاً لضمان وجودها
+      # v0.12.1: the stubs must be VALID SARIF — `runs: []` is rejected by
+      # the code-scanning upload API ("1 item required; only 0 were
+      # supplied"), which is how the upload kept failing silently. A stub
+      # now declares its tool driver with zero results; run_mizan.py
+      # overwrites these with real scanner output when the scans run.
       - name: Ensure SARIF files exist
         run: |
-          echo '{"version": "2.1.0", "runs": []}' > bandit.sarif
-          echo '{"version": "2.1.0", "runs": []}' > semgrep.sarif
+          echo '{"version": "2.1.0", "runs": [{"tool": {"driver": {"name": "bandit"}}, "results": []}]}' > bandit.sarif
+          echo '{"version": "2.1.0", "runs": [{"tool": {"driver": {"name": "semgrep"}}, "results": []}]}' > semgrep.sarif
 
       - name: Run MIZAN Scan (SAST)
         id: mizan_scan
