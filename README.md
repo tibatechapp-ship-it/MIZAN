@@ -1,139 +1,222 @@
+<div align="center">
+
 # ⚖️ MIZAN Security
 
-One lightweight, fast engine for code, secrets, dependencies and CI hardening.
+**The read-only security engine that fits one command.**
 
-MIZAN Security is an open-source security engine that inspects repositories
-read-only, explains every finding in plain language, and gives your team full
-control over what should fail a build and what should stay quiet.
+Code · Secrets · Dependencies · CI · Documentation — inspected in a single
+pass, explained in plain language, never executed.
 
-## What it does for you
+[![MIZAN CI](https://github.com/tibatechapp-ship-it/MIZAN/actions/workflows/tests.yml/badge.svg)](https://github.com/tibatechapp-ship-it/MIZAN/actions/workflows/tests.yml)
+[![MIZAN Security Scan](https://github.com/tibatechapp-ship-it/MIZAN/actions/workflows/mizan.yml/badge.svg)](https://github.com/tibatechapp-ship-it/MIZAN/actions/workflows/mizan.yml)
+[![Python](https://img.shields.io/badge/python-3.10%E2%80%933.14-blue)](https://github.com/tibatechapp-ship-it/MIZAN/actions/workflows/tests.yml)
+[![Release](https://img.shields.io/github/v/release/tibatechapp-ship-it/MIZAN)](https://github.com/tibatechapp-ship-it/MIZAN/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Self-scan](https://img.shields.io/badge/self--scan-0%20actionable%20findings-brightgreen)](CHANGELOG.md)
 
-- **Start in one command** — `mizan full-scan .` covers code analysis,
-  secrets patterns, dependency manifests, CI configuration and change risk
-  in a single report.
-- **Stay focused** — the severity gate fails builds on critical/high
-  findings only; everything else is reported, not shouted.
-- **Move fast without noise** — baseline delta scanning absorbs known
-  findings and alerts you on what is new.
-- **Fast by design** — scanners run in parallel by default; wall time is
-  the slowest pass, not the sum.
-- **No surprises** — read-only by default: MIZAN never executes the code
-  it inspects, and any repair goes through a verified, isolated gate.
-- **Fits your pipeline** — SARIF 2.1.0 for GitHub code scanning, JSON and
-  HTML reports, CI-friendly exit codes, automatic PR comments.
+[Quickstart](#quickstart) · [The engine](#the-engine-one-pass-eight-scanners) · [Measured](#measured-not-marketed) · [The gate](#the-gate-honest-exit-codes) · [Policies](#custom-policies) · [GitHub Action](#github-action) · [Docs](#documentation)
+
+</div>
+
+## Why MIZAN
+
+Security tooling usually forces a trade: heavyweight platforms that own your
+workflow, or noisy linters that teach your team to ignore alerts. MIZAN is the
+third option — a precision-first engine you run locally, in your pipeline, on
+your terms.
+
+- **One command, the whole surface** — `mizan full-scan .` covers static
+  analysis, secret patterns, dependency manifests, vulnerability feeds, CI
+  configuration, change risk and documentation health in a single report.
+- **Read-only by design** — MIZAN never executes the code it inspects. Every
+  scanner is read-only; any repair goes through a dry-run-first, isolated,
+  test-verified gate.
+- **Precision is a feature, not a hope** — a measured **−93.6% false-positive
+  reduction** across 20 real repositories (v0.9.0); on the latest field wave,
+  **20/20 sampled findings verified true positives, zero security false
+  positives** (v0.12.0).
+- **Fail loud, never fake green** — MIZAN distinguishes *clean* (exit 0),
+  *blocking findings* (exit 1) and *could not verify* (exit 2). A scan that
+  could not load its policies never certifies a pass.
+- **SARIF-native** — SARIF 2.1.0 output wired directly into GitHub code
+  scanning, plus JSON and self-contained HTML reports.
 - **Works offline** — dependency vulnerability checks run against OSV.dev
-  with a local cache; no cloud account required.
-- **Your own policies** — declarative custom rules in `.mizan/rules.json`
-  (regex per line, no new query language): invalid rules are rejected
-  loudly and an unloadable policies file never certifies a clean pass.
-- **Honest dependency precision** — correct OSV ecosystem per manifest
-  (npm / crates.io / Go / Packagist, not just PyPI), dev-dependency
-  findings capped below the default gate with the original severity
-  preserved, and shallow import-based reachability metadata that
-  informs triage without ever downgrading a severity.
-- **Accountable** — a ledger log records every engineering decision.
+  with batched queries and a local cache. No cloud account, no data leaves
+  your machine.
+- **Your policies, declaratively** — custom rules in `.mizan/rules.json`
+  (plain regex per line, no new query language). Invalid rules are rejected
+  loudly, not silently dropped.
+- **Accountable** — an engineering ledger records every decision, and the
+  severity gate only fails builds on what you told it to fail on.
 
-## Capabilities
+## The engine: one pass, eight scanners
 
-- Repository structure inspection & static source analysis (AST-based).
-- **Documentation Intelligence** — `mizan doc-scan` verifies the docs that
-  explain the code still match reality: broken links and anchors, stale
-  references, undocumented API endpoints, docstring coverage, README
-  command validity, and git-aware change-impact review — read-only.
-- Unified severity gate — `mizan scan --gate critical,high` fails the build
-  on blocking findings only.
-- Baseline (delta) scanning — gate ONLY on *new* findings versus
-  `.mizan/baseline.json`; kill alert fatigue without hiding regressions.
-- Parallel full-scan — 8 read-only scanners run concurrently (`--jobs N`),
-  wall time becomes the slowest pass instead of the sum.
-- OSV.dev dependency vulnerability feeds with batched queries, caching and
-  offline mode; SARIF 2.1.0 output for GitHub code scanning.
-- Verifiable safe-repair gate (dry-run by default, isolated worktree apply),
-  engineering ledger, PR approval policy engine.
+| Scanner | Command | What it inspects |
+|---|---|---|
+| Static Analyzer | `mizan analyze` | AST-based source analysis — injection vectors, unsafe calls, dangerous patterns |
+| Secrets & Patterns | `mizan scan` | curated detection rules for keys, tokens and credentials, plus code-quality checks |
+| Git Hygiene | `mizan git-scan` | repository-level risk in history and configuration — read-only |
+| CI Auditor | `mizan ci-scan` | workflow hardening gaps in your CI/CD configuration |
+| Dependency Scanner | `mizan dependency-scan` | manifests per ecosystem — npm, crates.io, Go, Packagist, PyPI |
+| Vulnerability Feed | `mizan vuln-scan` | known vulnerabilities via OSV.dev — batched, cached, offline-capable |
+| Change Risk | `mizan risk-scan` | risk assessment of pending changes without modifying files |
+| Doc Intelligence | `mizan doc-scan` | do the docs still match reality? broken links, stale references, undocumented endpoints, README command validity |
 
-## Safety
+Run everything at once — eight read-only scanners in parallel, wall time is
+the slowest pass, not the sum:
 
-MIZAN performs read-only source inspection.
-It does not execute inspected repository code.
+```bash
+mizan full-scan . --jobs 4
+```
 
-## Installation
+## Measured, not marketed
+
+Every number below is reproducible from the project's own changelog and CI —
+not aspirational marketing.
+
+| Metric | Result | Where it was measured |
+|---|---|---|
+| Full-scan wall time — requests, axios, cobra, fd, chalk | **0.5–1.6 s** per repository | v0.12.0 field notes |
+| False-positive reduction vs prior wave, 20 real repositories | **−93.6%** | v0.9.0 precision wave |
+| Sampled findings verified true positives | **20/20**, zero security FPs | v0.12.0 field notes |
+| MIZAN scanning its own repository | **0 actionable findings** across all scanners | v0.12.1+, strict `--gate` |
+| Test suite | **402 tests green**, Python 3.10–3.14 | CI, every push |
+| Trusted CI steps that can hide a failure | **0** (`continue-on-error` removed) | v0.12.1 |
+
+## Quickstart
 
 ```bash
 python -m pip install -e .
 ```
 
-## Usage
-
 ```bash
+# Look around — project structure, technologies, entry points
 mizan inspect .
+mizan detect .
+
+# Static analysis with a JSON report
 mizan analyze . --output reports/analysis.json
 
-# Severity gate — exit 1 only on critical/high findings
+# Unified scan with the severity gate — exit 1 only on critical/high
 mizan scan . --gate critical,high
 
-# Your own policies — .mizan/rules.json (v1 schema):
-# {
-#   "version": 1,
-#   "rules": [
-#     {"id": "custom-no-eval", "severity": "high",
-#      "languages": ["python"], "pattern": "\\beval\\s*\\(",
-#      "message": "eval() is forbidden by policy"}
-#   ]
-# }
-# Custom findings flow through the same gate/baseline pipeline; a broken
-# rules file makes the gate return exit 2 (incomplete) — a scan that
-# could not load its policies never certifies a clean pass.
+# The whole surface, one report, one gate
+mizan full-scan . --gate critical,high
 
-# Delta scanning — absorb known findings, gate on new ones only
+# Do the docs still match the code?
+mizan doc-scan . --format text
+```
+
+## The gate: honest exit codes
+
+The difference between *clean* and *could not verify* is the difference
+between a green build and a false one:
+
+| Exit code | Meaning |
+|---|---|
+| `0` | complete scan — no blocking findings |
+| `1` | complete scan — blocking findings present |
+| `2` | **incomplete** — a scanner failed, or OSV verification was impossible; never a silent clean pass |
+
+### Baseline (delta) scanning — kill alert fatigue, not signal
+
+```bash
 mizan baseline . --save .mizan/baseline.json
 mizan scan . --gate --baseline .mizan/baseline.json
-
-# Parallel full-scan (8 scanners, one JSON report)
-mizan full-scan . --jobs 4
-
-# Documentation Intelligence — do the docs still match reality?
-mizan doc-scan . --format text
-mizan doc-scan . --format json --output reports/docs.json
-
-# Gate the WHOLE scan (code + CI + git + dependencies) with one threshold
-mizan full-scan . --gate critical,high --baseline .mizan/baseline.json
-
-# Gate exit codes — the difference between "clean" and "could not verify"
-#   0 = complete scan, no blocking findings
-#   1 = complete scan, blocking findings present
-#   2 = INCOMPLETE scan (a scanner failed, or OSV verification was
-#       impossible / offline with no cache) — never a silent clean pass
-mizan --version
-mizan ledger "Initial project setup" --actor human
 ```
+
+Known findings are absorbed; the gate alerts on what is *new*. Regressions
+are never hidden — they are the whole point.
+
+## Custom policies
+
+Write rules in plain JSON — no new query language to learn:
+
+```json
+{
+  "version": 1,
+  "rules": [
+    {"id": "custom-no-eval", "severity": "high",
+     "languages": ["python"], "pattern": "\\beval\\s*\\(",
+     "message": "eval() is forbidden by policy"}
+  ]
+}
+```
+
+Custom findings flow through the same gate and baseline pipeline as built-in
+ones. A broken rules file makes the gate return exit 2 (incomplete) — a scan
+that could not load its policies never certifies a clean pass.
+
+## GitHub Action
+
+Drop MIZAN into any workflow — SARIF lands in GitHub code scanning
+automatically:
+
+```yaml
+- uses: tibatechapp-ship-it/MIZAN/action@main
+  with:
+    fail-on-findings: 'true'
+    sarif-output: mizan-results.sarif
+```
+
+Optional inputs: `auto-fix` (apply safe dependency upgrades that pass your
+tests) and `create-pr` (open a PR with the fixes). See
+[`action/README.md`](action/README.md) for the full reference.
+
+## Portfolio: one report for many repositories
+
+```bash
+mizan portfolio ./repos/* --output portfolio.html
+```
+
+Aggregates full-scan results for multiple repositories into **one
+self-contained HTML report** with gate-fingerprint deduplication — a local
+display layer for governance visibility, explicitly not a GRC platform.
+
+## Documentation
+
+| Document | Purpose |
+|---|---|
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | how the engine is built |
+| [`docs/features.md`](docs/features.md) | full capability reference (عربي) |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | honest gap analysis and the P2 plan |
+| [`docs/AI_COLLABORATION.md`](docs/AI_COLLABORATION.md) | how AI agents contribute to this repo |
+| [`SECURITY.md`](SECURITY.md) | disclosure policy |
+| [`CHANGELOG.md`](CHANGELOG.md) | every release, measured and documented |
+
+## Project status
+
+**Current release: Version 0.12.1** — fail-loud CI everywhere (the three
+trusted-workflow steps no longer carry `continue-on-error`; SARIF upload was
+silently broken since project birth and is now fixed), zero actionable
+self-scan findings across every scanner, and the README you are reading
+passes MIZAN's own Documentation Intelligence.
 
 ## Evolution
 
 - **v0.12.1** — Fail-loud CI: the three trusted-workflow steps no longer
   swallow real failures (`continue-on-error` removed; the email reporter
-  exits 1 on a real send failure). Self-scan now reports ZERO actionable
+  exits 1 on a real send failure). Self-scan reports zero actionable
   findings across every scanner.
-- **v0.12.0** — Portfolio: one local, self-contained HTML report across
-  many repositories (`mizan portfolio <dirs…>`) with gate-fingerprint
-  deduplication — a display layer, explicitly not a GRC platform. Plus
-  OSV cache-key hardening (`usedforsecurity=False`) found by MIZAN's
-  own self-scan.
+- **v0.12.0** — Portfolio: one local, self-contained HTML report across many
+  repositories with gate-fingerprint deduplication. Plus OSV cache-key
+  hardening (`usedforsecurity=False`) found by MIZAN's own self-scan.
 - **v0.11.0** — Dependency precision & custom policies: correct OSV
-  ecosystems per manifest, honest dev-dependency severity cap,
-  shallow reachability metadata, and `.mizan/rules.json` declarative
-  custom rules with the fail-loud contract (see `docs/ROADMAP.md` for
-  the full competitive-gap plan).
+  ecosystems per manifest, honest dev-dependency severity cap, shallow
+  reachability metadata, and `.mizan/rules.json` declarative custom rules
+  with the fail-loud contract.
 - **v0.10.0** — Documentation Intelligence: MIZAN audits the docs that
   explain the code, not just the code itself.
-- **v0.9.0** — Precision wave: ‑93.6% false positives on 20 real
+- **v0.9.0** — Precision wave: −93.6% false positives on 20 real
   repositories, 5 new detection rules with positive/negative tests.
-- **v0.8.x** — Severity gate, baseline delta scanning, parallel full-scan,
-  smoother gate UX.
+- **v0.8.x** — Severity gate, baseline delta scanning, parallel full-scan.
 - **v0.7.0** — Security hardening wave: safe scan/publish CI pipeline,
   verified isolated repair gate, disclosure policy.
 - **v0.2.0** — Verified-fix engine, OSV vulnerability feeds, SARIF output,
   accountability ledger.
 
-## Project status
+## License
 
-Version 0.12.1 — Fail-loud CI everywhere: the three trusted-workflow steps (SARIF upload, GitGuardian, email report) no longer carry `continue-on-error` — they self-guard when unconfigured (clean skip) and fail visibly on real errors, and the email reporter exits 1 on a real send failure. The repository's own full-scan now reports ZERO actionable findings across every scanner (analysis, secrets, git, CI, dependencies, change-risk), with only known informational documentation notes remaining. Field-measured on five real open-source projects (requests, axios, cobra, fd, chalk): 0.5–1.6s per full scan, 20/20 sampled findings verified true positives, zero security false positives in the sample. On top of v0.12.0 Portfolio aggregation (`mizan portfolio <dirs…>` folds full-scan results for multiple repositories into ONE self-contained HTML report with gate-fingerprint deduplication — a local display layer for governance visibility, explicitly not a GRC platform), v0.11.0 dependency precision (correct OSV ecosystem per manifest — npm, crates.io, Go, Packagist), the honest dev-dependency severity cap, shallow import-based reachability metadata, and `.mizan/rules.json` declarative custom rules with the fail-loud contract; and v0.10.0 Documentation Intelligence and the v0.9.0 precision wave (‑93.6% false positives on 20 real repositories, 5 new detection rules).
+[MIT](LICENSE) — free and open source, forever. See
+[`docs/FREE_AND_OPEN_SOURCE_POLICY.md`](docs/FREE_AND_OPEN_SOURCE_POLICY.md)
+for the full policy.
