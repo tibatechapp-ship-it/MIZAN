@@ -8,6 +8,7 @@ reports/
 backups/
 .mizan/*
 !.mizan/baseline.json
+!.mizan/rules.json
 *.egg-info/
 *.sarif
 mizan_report.md
