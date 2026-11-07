@@ -159,16 +159,24 @@ jobs:
         with:
           name: mizan-report
 
-      - name: Upload SARIF to GitHub Security
+      # v0.12.1: the old single step passed a multiline `sarif_file`
+      # ("bandit.sarif\nsemgrep.sarif") which the action treats as ONE
+      # nonexistent path — it had been failing silently behind
+      # continue-on-error forever. The official pattern is one upload
+      # per tool, each with its own category.
+      - name: Upload bandit SARIF to GitHub Security
         if: always()
-        # v0.12.1: continue-on-error removed — this step runs ONLY in the
-        # trusted push context (job gate) with security-events: write, so
-        # a failed upload is a real failure and must be visible.
         uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
         with:
-          sarif_file: |
-            bandit.sarif
-            semgrep.sarif
+          sarif_file: bandit.sarif
+          category: bandit
+
+      - name: Upload semgrep SARIF to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
 
       - name: GitGuardian Secret Scan (trusted context)
         if: always()
