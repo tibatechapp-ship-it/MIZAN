@@ -151,7 +151,10 @@ Drafted only after the 10-question manual triage gate passed.
 def _html(finding: dict, repo: str, cwe: dict, vector: str, score: float,
           band: str, contact_line: str, snippet_block: str) -> str:
     esc = html.escape
-    snippet_html = (f"<pre><code>{esc(snippet_block.strip('`\\n'))}</code></pre>"
+    # py3.10/3.11 compat: backslashes inside f-string expressions are
+    # rejected before 3.12 (PEP 701) — hoist the strip() out of the literal.
+    snippet_stripped = snippet_block.strip('`\\n') if snippet_block else ''
+    snippet_html = (f"<pre><code>{esc(snippet_stripped)}</code></pre>"
                     if snippet_block else
                     "<p>No source snippet is included by default "
                     "(secret-safety policy).</p>")
