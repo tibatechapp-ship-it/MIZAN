@@ -168,5 +168,12 @@ losing sovereignty over MIZAN's own rule set.
   a lead for review, not proof of exploitability.
 - Bandit per-check Severity/Confidence values were not re-verified this
   wave (see Provenance & license).
+- **Measured drift alert (2026-11-08, see `COMPARISON.md`): Bandit 1.9.4
+  expanded B615** — it now fires on HF downloads without a pinned
+  `revision=` (`snapshot_download`/`from_pretrained`/`load_dataset`), which
+  is a different signal from the `trust_remote_code=True` check MIZAN
+  adopted. 9 such sites were measured in the field run. Candidate rule
+  `hf-unpinned-download` is deferred pending the 20-repo FP gate; this is
+  exactly why every parity session re-verifies per-check semantics.
 - This document records what was measured and decided; it does not certify
   MIZAN as equivalent to Bandit in coverage.

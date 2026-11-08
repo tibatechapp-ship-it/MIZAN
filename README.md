@@ -182,6 +182,8 @@ display layer for governance visibility, explicitly not a GRC platform.
 | [`docs/features.md`](docs/features.md) | full capability reference (عربي) |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | honest gap analysis and the P2 plan |
 | [`docs/AI_COLLABORATION.md`](docs/AI_COLLABORATION.md) | how AI agents contribute to this repo |
+| [`docs/BANDIT_PARITY.md`](docs/BANDIT_PARITY.md) | adopt/reject/defer contract vs Bandit |
+| [`docs/COMPARISON.md`](docs/COMPARISON.md) | measured MIZAN vs Bandit comparison — including the gaps |
 | [`SECURITY.md`](SECURITY.md) | disclosure policy |
 | [`CHANGELOG.md`](CHANGELOG.md) | every release, measured and documented |
 
@@ -196,6 +198,19 @@ rejected as structural noise — the full adopt/reject/defer contract,
 deviations, and update cycle live in [`docs/BANDIT_PARITY.md`](docs/BANDIT_PARITY.md).
 420 tests green; field measurement on four local repositories: 16
 hand-checked hits, 0 false positives. Read-only, offline, as always.
+
+**Suppression policy (please read before CI integration): MIZAN does not
+honor `# nosec` comments.** A finding is never silently buried by a comment
+next to the flagged line — that is a measured, deliberate design decision
+(fail-loud). To accept known findings, use explicit, versioned, reviewable
+delta scanning instead:
+
+```bash
+mizan baseline . --save .mizan/baseline.json --note "reviewed & accepted set"
+mizan full-scan . --baseline .mizan/baseline.json
+```
+
+Only findings whose fingerprint is not in the baseline reach the gate.
 
 ## Evolution
 
