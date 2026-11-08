@@ -216,6 +216,53 @@ def main(argv=None):
     )
     remote_cmd.add_argument("--output", default=None)
 
+    report_cmd = commands.add_parser(
+        "report",
+        help=("Local disclosure-report toolkit (docs/REPORT_SECURITY.md): "
+              "triage-gated draft generation, local view, 90-day overdue "
+              "tracking, SARIF export. No network; no publish command.")
+    )
+    report_sub = report_cmd.add_subparsers(dest="report_command",
+                                           required=True)
+    report_gen = report_sub.add_parser(
+        "generate",
+        help="generate a DRAFT report for ONE finding — triage-gated"
+    )
+    report_gen.add_argument("scan_json")
+    report_gen.add_argument("--finding-id", required=True)
+    report_gen.add_argument(
+        "--confirm", required=True,
+        help="must equal --finding-id (typed by the operator)"
+    )
+    report_gen.add_argument(
+        "--triage", required=True,
+        help="path to the completed 10-question triage JSON"
+    )
+    report_gen.add_argument("--output", required=True)
+    report_gen.add_argument(
+        "--repo-root", default=".",
+        help="repository root for local SECURITY.md discovery"
+    )
+    report_gen.add_argument("--repo", default=None,
+                            help="repository display name")
+    report_gen.add_argument(
+        "--include-snippet", action="store_true",
+        help="include a redacted source snippet (default: none)"
+    )
+    report_show = report_sub.add_parser(
+        "show",
+        help="view one finding locally (redacted, never a snippet)"
+    )
+    report_show.add_argument("scan_json")
+    report_show.add_argument("--finding-id", required=True)
+    report_sub.add_parser(
+        "overdue", help="disclosures past the 90-day deadline"
+    )
+    report_exp = report_sub.add_parser(
+        "export", help="export tracked drafts as SARIF"
+    )
+    report_exp.add_argument("--output", required=True)
+
     git_cmd = commands.add_parser(
         "git-scan",
         help="Inspect Git repository without modifying it"
@@ -496,6 +543,11 @@ def main(argv=None):
                 rendered = json.dumps(result, indent=2, ensure_ascii=False)
             save_or_print(rendered, args.output)
             return 0
+
+        elif args.command == "report":
+            # Local-only disclosure toolkit (docs/REPORT_SECURITY.md).
+            from .report import cli as report_cli
+            return report_cli.dispatch(args)
 
         elif args.command == "git-scan":
             result = scan_git_repository(args.path)
