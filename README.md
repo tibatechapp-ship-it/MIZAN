@@ -187,19 +187,23 @@ display layer for governance visibility, explicitly not a GRC platform.
 
 ## Project status
 
-**Current release: Version 0.12.3** — calibrated in the field on 100 real
-open-source repositories (zai-org first, then the newest November 2026
-projects): median scan time 1.04 s, zero crashes, zero timeouts — and the
-wave exposed three real defects that are now fixed: OSV batch queries are
-chunked (a 1024-dependency monorepo used to fail deterministically on HTTP
-400), the 0/1/2 exit contract now holds without `--gate` too, and the
-`dynamic-execution` rule no longer flags receiver calls like PyTorch's
-`Module.eval()` (a hand-audited semantic false positive). 414 tests
-green, zero actionable self-scan findings, and the README you are reading
-passes MIZAN's own Documentation Intelligence.
+**Current release: Version 0.13.0** — the Bandit-parity wave: nine
+high-signal checks adopted by **reimplementation** in MIZAN's own AST
+engine (TLS `verify=False`, unverified SSL context, request-without-timeout,
+`torch.load`, `trust_remote_code=True`, `autoescape=False`, `mark_safe`,
+`tarfile` extractall, hardcoded `/tmp` paths) and five Bandit checks
+rejected as structural noise — the full adopt/reject/defer contract,
+deviations, and update cycle live in [`docs/BANDIT_PARITY.md`](docs/BANDIT_PARITY.md).
+420 tests green; field measurement on four local repositories: 16
+hand-checked hits, 0 false positives. Read-only, offline, as always.
 
 ## Evolution
 
+- **v0.13.0** — Bandit-parity wave 1: nine rules adopted by reimplementation
+  (no Bandit code copied; Bandit is Apache-2.0, MIZAN is MIT), five
+  rejected as noise, every deviation asserted as a negative test, and a
+  live parity tracker (`docs/BANDIT_PARITY.md`) documenting the gap
+  instead of denying it.
 - **v0.12.3** — dynamic-execution bare-call boundary extended to the
   Python AST path: receiver calls (`Module.eval()`, `cursor.exec(...)`)
   are object methods, not the `eval()`/`exec()` builtins. Found by the

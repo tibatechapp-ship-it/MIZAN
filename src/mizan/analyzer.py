@@ -20,6 +20,17 @@ P1 — the five missing detection rules (each with positive + negative
 coverage in tests/test_detection_suite.py):
   unsafe-deserialization, yaml-unsafe-load, sql-injection,
   path-traversal, weak-crypto.
+
+v0.13.0 — Bandit-parity wave 1 (docs/BANDIT_PARITY.md):
+  Nine rules adopted by REIMPLEMENTATION in this AST engine — no Bandit
+  code copied; rule semantics informed by the Apache-2.0 Bandit project:
+  tls-verification-disabled (B501), ssl-unverified-context (B323),
+  request-without-timeout (B113), torch-unsafe-load (B614),
+  hf-trust-remote-code (B615), jinja2-autoescape-false (B701),
+  django-mark-safe (B703), tarfile-extractall (B202),
+  hardcoded-tmp-path (B108). B101/B110/B112/B311/B607 are deliberately
+  rejected as structural noise; every deviation from Bandit recall is
+  documented in docs/BANDIT_PARITY.md.
 """
 
 import ast
@@ -98,6 +109,16 @@ UNSAFE_DESERIALIZERS = frozenset({
     "pickle", "cPickle", "marshal", "dill", "shelve",
 })
 
+# v0.13.0 Bandit-parity wave 1 (B113-equiv): HTTP verb methods audited for
+# a missing `timeout` keyword on literal `requests.*` receivers.
+HTTP_VERB_METHODS = frozenset({
+    "get", "post", "put", "patch", "delete", "head", "options", "request",
+})
+
+# v0.13.0: PEP 706 tarfile extraction filters that neutralize path
+# traversal / symlink attacks (B202-equiv mitigation).
+TARFILE_SAFE_FILTERS = frozenset({"data", "tar"})
+
 
 def _is_placeholder(value: str) -> bool:
     """True when a secret-candidate value is a dictionary/placeholder word."""
@@ -144,9 +165,13 @@ def _fstring_has_value_interpolation(node):
 class PythonSecurityVisitor(ast.NodeVisitor):
     """Detect security-sensitive Python constructs."""
 
-    def __init__(self, tainted_names=None):
+    def __init__(self, tainted_names=None, zipfile_vars=None):
         self.findings = []
         self.tainted_names = tainted_names or set()
+        # v0.13.0: variable names assigned from zipfile.* constructors —
+        # B202-equiv scope carve-out (tar symlink traversal does not apply
+        # to the zip format).
+        self.zipfile_vars = zipfile_vars or set()
 
     def add(self, node, rule, severity, message):
         self.findings.append({
@@ -165,6 +190,14 @@ class PythonSecurityVisitor(ast.NodeVisitor):
             node = node.value
         if isinstance(node, ast.Name):
             return node.id
+        return None
+
+    @staticmethod
+    def _kwarg(node, arg_name):
+        """Keyword value for `arg_name` in a Call node, else None."""
+        for kw in node.keywords:
+            if kw.arg == arg_name:
+                return kw.value
         return None
 
     @staticmethod
@@ -328,7 +361,166 @@ class PythonSecurityVisitor(ast.NodeVisitor):
                     % node.func.attr.upper()
                 )
 
+        # -- v0.13.0 Bandit-parity wave 1 (docs/BANDIT_PARITY.md) --------
+
+        # tls-verification-disabled (B501-equiv): the verify=False keyword
+        # itself is the dangerous signal regardless of the client library.
+        verify_kw = self._kwarg(node, "verify")
+        if isinstance(verify_kw, ast.Constant) and verify_kw.value is False:
+            self.add(
+                node, "tls-verification-disabled", "high",
+                "TLS certificate verification explicitly disabled "
+                "(verify=False) — man-in-the-middle exposure."
+            )
+
+        # ssl-unverified-context (B323-equiv): ssl._create_unverified_context()
+        # (qualified or star-imported bare) disables validation globally.
+        if name == "_create_unverified_context" and (
+                isinstance(node.func, ast.Name)
+                or (isinstance(node.func, ast.Attribute)
+                    and self._root_name(node.func.value) == "ssl")):
+            self.add(
+                node, "ssl-unverified-context", "high",
+                "ssl._create_unverified_context() disables certificate "
+                "validation for the process."
+            )
+
+        # request-without-timeout (B113-equiv): qualified requests.* HTTP
+        # verb calls without a timeout keyword. Deliberately narrower than
+        # Bandit recall: session-like receivers (session.get(...)) are out
+        # of scope — documented deviation, keeps the rule FP-free.
+        if (name in HTTP_VERB_METHODS
+                and isinstance(node.func, ast.Attribute)
+                and self._root_name(node.func.value) == "requests"
+                and self._kwarg(node, "timeout") is None):
+            self.add(
+                node, "request-without-timeout", "low",
+                "HTTP request without an explicit timeout can hang "
+                "indefinitely (availability exposure)."
+            )
+
+        # torch-unsafe-load (B614-equiv): torch.load deserializes via
+        # pickle unless weights_only=True is explicit (PyTorch mitigation).
+        if (name == "load"
+                and isinstance(node.func, ast.Attribute)
+                and self._root_name(node.func.value) == "torch"):
+            weights_only = self._kwarg(node, "weights_only")
+            safe = (isinstance(weights_only, ast.Constant)
+                    and weights_only.value is True)
+            if not safe:
+                self.add(
+                    node, "torch-unsafe-load", "high",
+                    "torch.load deserializes via pickle — arbitrary code "
+                    "execution from untrusted checkpoints (use "
+                    "weights_only=True)."
+                )
+
+        # hf-trust-remote-code (B615-equiv): any call opting into executing
+        # code fetched from a remote model repository.
+        trc = self._kwarg(node, "trust_remote_code")
+        if isinstance(trc, ast.Constant) and trc.value is True:
+            self.add(
+                node, "hf-trust-remote-code", "high",
+                "trust_remote_code=True executes arbitrary code from a "
+                "remote model repository."
+            )
+
+        # jinja2-autoescape-false (B701-equiv): explicit autoescape=False.
+        autoescape = self._kwarg(node, "autoescape")
+        if isinstance(autoescape, ast.Constant) and autoescape.value is False:
+            self.add(
+                node, "jinja2-autoescape-false", "high",
+                "autoescape=False disables HTML escaping — cross-site "
+                "scripting exposure."
+            )
+
+        # django-mark-safe (B703-equiv): mark_safe bypasses escaping.
+        if name == "mark_safe":
+            self.add(
+                node, "django-mark-safe", "medium",
+                "mark_safe() marks content XSS-safe without escaping — "
+                "audit the input path."
+            )
+
+        # tarfile-extractall (B202-equiv): extractall without a PEP 706
+        # safe filter. zipfile receivers are NOT flagged — tar symlink
+        # traversal does not apply to the zip format (documented
+        # deviation from Bandit recall).
+        if name == "extractall" and isinstance(node.func, ast.Attribute):
+            filt = self._kwarg(node, "filter")
+            filter_safe = (isinstance(filt, ast.Constant)
+                           and isinstance(filt.value, str)
+                           and filt.value in TARFILE_SAFE_FILTERS)
+            receiver_root = self._root_name(node.func.value)
+            if receiver_root not in ({"zipfile"} | self.zipfile_vars) \
+                    and not filter_safe:
+                self.add(
+                    node, "tarfile-extractall", "high",
+                    "extractall without filter= can write outside the "
+                    "target directory (path traversal)."
+                )
+
+        # hardcoded-tmp-path (B108-equiv): /tmp and /var/tmp literals in
+        # call-argument positions (list/tuple elements included) —
+        # docstrings and bare expression strings are not flagged
+        # (documented precision deviation).
+        for arg in node.args:
+            self._check_tmp_value(node, arg)
+        for kw in node.keywords:
+            self._check_tmp_value(node, kw.value)
+
         self.generic_visit(node)
+
+    def visit_Assign(self, node):
+        # hardcoded-tmp-path (B108-equiv): assignment value positions.
+        self._check_tmp_value(node, node.value)
+        self.generic_visit(node)
+
+    def visit_AnnAssign(self, node):
+        if node.value is not None:
+            self._check_tmp_value(node, node.value)
+        self.generic_visit(node)
+
+    def _check_tmp_value(self, node, value):
+        """Flag /tmp and /var/tmp literals in value positions, one nesting
+        level into list/tuple/set literals (segment-boundary safe)."""
+        if isinstance(value, ast.Constant):  # accept node or raw value
+            value = value.value
+        if isinstance(value, str) and (
+                value == "/tmp" or value.startswith("/tmp/")
+                or value == "/var/tmp" or value.startswith("/var/tmp/")):
+            self.add(
+                node, "hardcoded-tmp-path", "low",
+                "Hardcoded temp path invites symlink races and predictable "
+                "filenames — use tempfile."
+            )
+        elif isinstance(value, (ast.Tuple, ast.List, ast.Set)):
+            for elt in value.elts:
+                if isinstance(elt, ast.Constant):
+                    self._check_tmp_value(node, elt.value)
+
+
+def _collect_zipfile_vars(tree):
+    """Names bound to zipfile.* instances (B202-equiv scope carve-out):
+    assignment targets AND with-item bindings."""
+    names = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.With, ast.AsyncWith)):
+            for item in node.items:
+                expr, optional = item.context_expr, item.optional_vars
+                if (isinstance(expr, ast.Call)
+                        and isinstance(expr.func, ast.Attribute)
+                        and PythonSecurityVisitor._root_name(expr.func) == "zipfile"
+                        and isinstance(optional, ast.Name)):
+                    names.add(optional.id)
+        elif isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
+            func = node.value.func
+            if isinstance(func, ast.Attribute) and \
+                    PythonSecurityVisitor._root_name(func) == "zipfile":
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        names.add(target.id)
+    return names
 
 
 def _collect_input_taints(tree):
@@ -410,7 +602,8 @@ def analyze_file(path, root, custom_rules=()):
         try:
             tree = ast.parse(content, filename=str(path))
             visitor = PythonSecurityVisitor(
-                tainted_names=_collect_input_taints(tree)
+                tainted_names=_collect_input_taints(tree),
+                zipfile_vars=_collect_zipfile_vars(tree),
             )
             visitor.visit(tree)
 

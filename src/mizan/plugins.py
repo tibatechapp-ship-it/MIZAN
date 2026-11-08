@@ -29,6 +29,16 @@ PLUGINS = (
             "sql-injection",
             "path-traversal",
             "weak-crypto",
+            # v0.13.0 Bandit-parity wave 1 (docs/BANDIT_PARITY.md)
+            "tls-verification-disabled",
+            "ssl-unverified-context",
+            "request-without-timeout",
+            "torch-unsafe-load",
+            "hf-trust-remote-code",
+            "jinja2-autoescape-false",
+            "django-mark-safe",
+            "tarfile-extractall",
+            "hardcoded-tmp-path",
         ),
     ),
     Plugin(
