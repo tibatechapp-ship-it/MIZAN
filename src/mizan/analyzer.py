@@ -78,14 +78,14 @@ SOURCE_EXTENSIONS = {
 
 SECRET_PATTERN = re.compile(
     r"""(?i)\b(?:[a-z0-9]+[_-])+(api[_-]?key|secret|password|token)\b
-    \s*[:=]\s*["'](?P<value>[^"']{8,})["']""",
+    \s*(?::?=|:)\s*["'](?P<value>[^"']{8,})["']""",
     re.VERBOSE
 )
 
 # Same shape with the bare keyword (PASSWORD = ... / token = ...).
 SECRET_PATTERN_BARE = re.compile(
     r"""(?i)\b(api[_-]?key|secret|password|token)\b
-    \s*[:=]\s*["'](?P<value>[^"']{8,})["']""",
+    \s*(?::?=|:)\s*["'](?P<value>[^"']{8,})["']""",
     re.VERBOSE
 )
 
