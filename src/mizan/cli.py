@@ -2,6 +2,8 @@
 
 import argparse
 import json
+import os
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -194,6 +196,25 @@ def main(argv=None):
             "baseline (delta scanning — kills alert fatigue)"
         ),
     )
+
+    remote_cmd = commands.add_parser(
+        "scan-remote",
+        help=("Scan a GitHub repository via the Tarball API with strict "
+              "safe-extraction filters (see docs/REMOTE_SCAN.md); the "
+              "extracted tree is deleted immediately after the scan")
+    )
+    remote_cmd.add_argument("owner_repo", metavar="OWNER/REPO")
+    remote_cmd.add_argument(
+        "--ref", default=None,
+        help="branch, tag or commit SHA (default: repository default branch)"
+    )
+    remote_cmd.add_argument(
+        "--category", choices=["all", "security", "quality"], default="all"
+    )
+    remote_cmd.add_argument(
+        "--format", choices=["json", "html"], default="json"
+    )
+    remote_cmd.add_argument("--output", default=None)
 
     git_cmd = commands.add_parser(
         "git-scan",
@@ -448,6 +469,32 @@ def main(argv=None):
             # the scan incomplete — never a silent clean pass.
             if result.get("custom_rules_errors"):
                 return 2
+            return 0
+
+        elif args.command == "scan-remote":
+            # P1.3 field-measurement path: GitHub Tarball API + strict safe
+            # extraction (docs/REMOTE_SCAN.md). Local `scan` is untouched.
+            from .remote_scan import RemoteScanError, scan_remote
+            token = (
+                os.environ.get("MIZAN_GH_TOKEN")
+                or os.environ.get("GH_TOKEN")
+                or None
+            )  # header-only use inside remote_scan; never printed/stored
+            try:
+                result = scan_remote(
+                    args.owner_repo,
+                    ref=args.ref,
+                    category=args.category,
+                    token=token,
+                )
+            except RemoteScanError as exc:
+                print(f"scan-remote: {exc}", file=sys.stderr)
+                return 2
+            if args.format == "html":
+                rendered = render_html(result)
+            else:
+                rendered = json.dumps(result, indent=2, ensure_ascii=False)
+            save_or_print(rendered, args.output)
             return 0
 
         elif args.command == "git-scan":

@@ -2,6 +2,20 @@
 
 يتبع هذا المشروع [Keep a Changelog](https://keepachangelog.com/) ودلالات الإصدارات الدلالية (SemVer).
 
+## [غير مُصدر] — v0.14.0-dev — `scan-remote` (Tarball API مع استخراج آمن)
+
+أمر جديد `mizan scan-remote OWNER/REPO [--ref REF]` — التنزيل عبر GitHub
+Tarball API، والاستخراج تحت خمسة فلاتر صارمة موثّقة في `docs/REMOTE_SCAN.md`:
+لا symlinks (ولا hardlinks)، لا `..`، لا مسارات مطلقة، حد 10MB/ملف، وحذف
+فوري لشجرة الاستخراج في `finally`. حراسة إضافية: سقف تنزيل 200MB، سقف
+استخراج كلي 512MB (tarbomb)، وعدم استدعاء `extractall` إطلاقًا (كتابة أعضاء
+فردية عبر `extractfile` بعد اجتياز كل فلتر). الرفض fail-loud (exit 2).
+`mizan scan` المحلي **لم يُمَسّ**؛ القياس الميداني للـ100 مستودع (P1.3)
+يجري عبر هذا الأمر لا عبر `git clone`. تسعة اختبارات جديدة (tarball خبيث
+بـ symlink، و`../../etc/passwd`، ومسار مطلق، وhardlink، وعضو ضخم،
+وشكل `owner/repo`، ومساران end-to-end مع تأكيد الحذف) — المجموعة الكاملة
+449 نجحت.
+
 ## [0.13.0] — 2026-11-08 — موجة توطين Bandit — الدفعة الأولى
 
 تبنّي قواعد Bandit عالية الإشارة عبر **إعادة تنفيذ** داخل محرك AST الخاص
