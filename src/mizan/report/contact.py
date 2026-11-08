@@ -59,6 +59,10 @@ def find_contact(repo: Path) -> dict:
                     result["url"] = contact
                 else:
                     result["email"] = contact.replace("mailto:", "")
+            else:
+                # honest distinction, same as the SECURITY.md branch: the
+                # policy file exists but names no parseable channel
+                result["policy"] = "CONTACT_FILE_FOUND_NO_CHANNEL"
             result["source"] = candidate
             return result
 

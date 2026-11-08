@@ -27,6 +27,35 @@
   تُشحن وتُثبت ميدانيًا أولًا، ومسار النشر الشبكي غير منفذ حتى ذلك الحين.
 - `mizan report show` غير مُحاط بالبوابة عمدًا — العرض المحلي ليس إفصاحًا.
 
+## حالات قناة الإبلاغ الثلاث (قياس فعلي من `report/contact.py`)
+
+| الحالة | المعنى | كيف تظهر في التقرير |
+|---|---|---|
+| `CONTACT_FOUND` | بريد أو رابط محدد من `SECURITY.md` / `security.txt` | البريد/الرابط نفسه في قسم Contact |
+| `CONTACT_FILE_FOUND_NO_CHANNEL` | ملف السياسة **موجود** لكن بلا بريد/رابط قابل للتحليل (بما فيه `security.txt` بلا سطر `Contact:`) | `CONTACT_FILE_FOUND_NO_CHANNEL (<source>)` — لا يُخمّن قناة أبدًا |
+| `NO_CONTACT_FOUND` | لا `SECURITY.md` ولا `security.txt` في المستودع | `NO_CONTACT_FOUND` — القرار للمشغّل |
+
+ملاحظة عملية (P1): قبل هذه الدفعة كانت حالة `security.txt` بلا سطر
+`Contact:` تُعيد `policy=None` من `find_contact()` بينما كان مُولّد
+التقرير يعرضها لاحقًا كـ `CONTACT_FILE_FOUND_NO_CHANNEL` عبر حقل
+`source` — تضارب بين الواجهة البرمجية والعرض. أُصلح: الحالتان
+(SECURITY.md و security.txt) تضبطان `policy` الآن بشكل متطابق، مختبر
+في `test_security_txt_without_contact_is_distinct`.
+
+## البوابة غير قابلة للتحايل (P1)
+
+- لا يوجد `--skip-triage` ولا `--force` ولا `--bypass` ولا `--override`
+  ولا مخرج طوارئ في أي أمر من أوامر `mizan report` — مثبت باختبار
+  قائمة-السماح الدقيق (`tests/test_gate_cannot_be_bypassed.py`): أي
+  علامة جديدة على `generate` تفشل الاختبار حتى تُضاف **واعيًا**.
+- لا متغير بيئة يخفض البوابة (`MIZAN_SKIP_TRIAGE`, `MIZAN_FORCE`,
+  `MIZAN_BYPASS_GATE`, `MIZAN_EMERGENCY` — كلها مختبرة بلا أثر).
+  المتغير الوحيد الذي تقرأه الوحدة هو `MIZAN_REPORT_DB` = مسار قاعدة
+  التتبع المحلية، لا علاقة له بالبوابة.
+- `--confirm` إلزامي من argparse نفسه (رفض قبل الوصول لمنطق البوابة)،
+  ويجب أن يساوي `--finding-id`، ويجب أن يكون ملف الفرز مكتمل الإجابات
+  العشر بمظهر آمن. أي فشل = exit 2 + صفر ملفات.
+
 ## الحدود بصدق (قياس فعلي لا ادعاء)
 
 1. `redact()` دفاع-في-العمق لا ضابط أول: لا يغطي السلاسل المقسومة على

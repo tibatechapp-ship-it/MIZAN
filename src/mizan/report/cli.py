@@ -150,12 +150,28 @@ def cmd_overdue(_args) -> int:
     return 0
 
 
+def _finding_of_row(row) -> dict:
+    """Parse a stored finding. Rows written before the P1 integration fix
+    held repr(dict) (single quotes); parse those with a tolerant fallback
+    so old local databases still export."""
+    raw = row["finding_json"] or "{}"
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        import ast
+        try:
+            parsed = ast.literal_eval(raw)
+        except (ValueError, SyntaxError):
+            parsed = {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
 def cmd_export(args) -> int:
     rows = Timeline().all_entries()
     results = []
     rules = []
     for row in rows:
-        finding = json.loads(row["finding_json"] or "{}")
+        finding = _finding_of_row(row)
         rule_id = str(finding.get("rule", "unknown"))
         level = {"Critical": "error", "High": "error",
                  "Medium": "warning"}.get(row["cvss_severity"], "warning")

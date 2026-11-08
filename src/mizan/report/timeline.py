@@ -13,6 +13,7 @@ The evidence chain lives in the ``chain`` table: every report hash links
 to the previous one (genesis prev_hash = 64 zeros).
 """
 
+import json
 import os
 import sqlite3
 from datetime import datetime, timedelta, timezone
@@ -100,7 +101,9 @@ class Timeline:
                  float(cvss_score), str(cvss_severity),
                  now.isoformat(), deadline.isoformat(), "draft",
                  str(contact.get("email") or contact.get("url") or ""),
-                 str(report_path), str(finding), ""),
+                 str(report_path),
+                 json.dumps(finding, ensure_ascii=False, sort_keys=True),
+                 ""),
             )
             conn.execute(
                 "INSERT INTO chain (id, report_hash, prev_hash, created_at) "

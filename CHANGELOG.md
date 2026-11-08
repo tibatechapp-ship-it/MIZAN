@@ -16,6 +16,27 @@ Tarball API، والاستخراج تحت خمسة فلاتر صارمة موث�
 وشكل `owner/repo`، ومساران end-to-end مع تأكيد الحذف) — المجموعة الكاملة
 449 نجحت.
 
+### إغلاق فجوات P1 الأربع (تقييم ما بعد `mizan report`)
+
+أربعة إصلاحات قيست قبل أي ميزة جديدة: **(1) البوابة غير قابلة للتحايل** —
+لا `--skip-triage`/`--force`/`--bypass` في الكود أو `--help`، ولا متغير
+بيئة يخفضها؛ مثبت باختبار قائمة-سماح دقيق: أي علامة جديدة على
+`report generate` تفشل الاختبار حتى تُضاف واعيًا
+(`tests/test_gate_cannot_be_bypassed.py` — 8 اختبارات). **(2) `redact()`
+على كل الحقول النصية بما فيها `message` و`file`** مثبت على مستوى الأنبوب
+الكامل: markdown/html/sarif/json وعلى القرص بعد طبقة التحقق الثالثة
+(`tests/test_redact_message.py` — 8 اختبارات؛ حقل `rule` ثابت لا يُمس).
+**(3) اختبار تكامل كامل scan → generate → show → overdue → export**
+عبر الـCLI الحقيقي (subprocess) — أمسك خللًا حقيقيًا: `report export`
+كان يفشل دائمًا لأن `record_draft` خزّن الـfinding بـ`str(dict)` (repr
+بعلامات مفردة) بينما قارؤه `json.loads`؛ أُصلح التخزين إلى JSON صحيح
+مع قارئ متسامح للصفوف القديمة. **(4) توثيق حالات قناة الإبلاغ الثلاث**
+(`CONTACT_FOUND` / `CONTACT_FILE_FOUND_NO_CHANNEL` /
+`NO_CONTACT_FOUND`) في `docs/REPORT_SECURITY.md` مع إصلاح تضارب:
+`security.txt` بلا سطر `Contact:` كان يُعيد `policy=None` — أصبح
+يضبط الحالة الصادقة الثالثة مثل SECURITY.md. المجموعة: 509/509
+(كانت 484 — +25 اختبارًا، `mizan scan` لم يُمَسّ).
+
 ### `mizan report` — حزمة الإفصاح المحلية (بلا شبكة، بلا تبعيات جديدة)
 
 أمر جديد بأربعة مسارات محلية بالكامل: `generate` (مسودة تقرير لإيجاد واحد —

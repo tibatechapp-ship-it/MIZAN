@@ -71,6 +71,22 @@ class ContactDiscoveryTests(unittest.TestCase):
             self.assertIsNone(result["email"])
             self.assertEqual(result["policy"], "CONTACT_FILE_FOUND_NO_CHANNEL")
 
+    def test_security_txt_without_contact_is_distinct(self):
+        """A security.txt naming no Contact: is the same honest third
+        state — file exists, channel does not (policy field consistent
+        with the SECURITY.md branch, P1 gap #4)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            wk = Path(tmp) / ".well-known"
+            wk.mkdir()
+            (wk / "security.txt").write_text(
+                "Expires: 2027-01-01T00:00:00Z\n", encoding="utf-8")
+            result = find_contact(Path(tmp))
+            self.assertEqual(result["source"], ".well-known/security.txt")
+            self.assertIsNone(result["email"])
+            self.assertIsNone(result["url"])
+            self.assertEqual(result["policy"],
+                             "CONTACT_FILE_FOUND_NO_CHANNEL")
+
 
 class TimelineTests(unittest.TestCase):
     def _timeline(self, tmp):
