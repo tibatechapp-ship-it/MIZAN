@@ -14,3 +14,10 @@ backups/
 mizan_report.md
 ggshield-results.json
 bandit.sarif
+
+# Secrets (explicit)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
