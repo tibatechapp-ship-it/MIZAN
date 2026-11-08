@@ -189,7 +189,7 @@ display layer for governance visibility, explicitly not a GRC platform.
 
 ## Project status
 
-**Current release: Version 0.14.0** — the field-hardening wave on top of
+**Current release: Version 0.15.0-dev (in development — latest stable: 0.14.0)** — the field-hardening wave on top of
 the measurement toolkit: a 50-repo `scan-remote` campaign (2026-11-08,
 Python/TypeScript AI repos) measured the engine end-to-end and fixed what
 it broke: internal tarball symlinks now materialize safely (out-of-tree
