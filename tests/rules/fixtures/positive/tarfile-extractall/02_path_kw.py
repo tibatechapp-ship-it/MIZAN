@@ -1,0 +1,1 @@
+archive.extractall(path=dest)

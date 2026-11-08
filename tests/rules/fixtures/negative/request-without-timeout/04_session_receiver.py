@@ -1,0 +1,1 @@
+r = session.get(url)

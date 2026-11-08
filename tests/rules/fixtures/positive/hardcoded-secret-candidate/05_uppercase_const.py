@@ -1,0 +1,1 @@
+DATABASE_PASSWORD = "pg-main-2026-key"

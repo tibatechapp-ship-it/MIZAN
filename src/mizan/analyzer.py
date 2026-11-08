@@ -77,6 +77,13 @@ SOURCE_EXTENSIONS = {
 }
 
 SECRET_PATTERN = re.compile(
+    r"""(?i)\b(?:[a-z0-9]+[_-])+(api[_-]?key|secret|password|token)\b
+    \s*[:=]\s*["'](?P<value>[^"']{8,})["']""",
+    re.VERBOSE
+)
+
+# Same shape with the bare keyword (PASSWORD = ... / token = ...).
+SECRET_PATTERN_BARE = re.compile(
     r"""(?i)\b(api[_-]?key|secret|password|token)\b
     \s*[:=]\s*["'](?P<value>[^"']{8,})["']""",
     re.VERBOSE
@@ -93,6 +100,7 @@ PLACEHOLDER_VALUES = frozenset({
     "my_password", "your_password", "your-password",
     "your_api_key", "your-api-key", "your_secret", "your-secret",
     "none", "null", "undefined", "test", "test123456", "test123",
+    "topsecret", "top_secret", "sup3rs3cret",
 })
 
 TODO_PATTERN = re.compile(r"\b(TODO|FIXME|XXX)\s*:")
@@ -136,6 +144,12 @@ def _is_placeholder(value: str) -> bool:
     norm = value.strip().lower()
     compact = re.sub(r"[\s_-]+", "", norm)
     if norm in PLACEHOLDER_VALUES or compact in PLACEHOLDER_VALUES:
+        return True
+    # template/interpolation placeholders: '{{tools}}', '{token}' —
+    # a credential is never a brace-wrapped slot name (field FP class,
+    # seekfeek TOOLS_TOKEN site)
+    if (norm.startswith("{{") and norm.endswith("}}")) or (
+            norm.startswith("{") and norm.endswith("}")):
         return True
     if any(marker in norm for marker in PLACEHOLDER_MARKERS):
         return True
@@ -245,19 +259,30 @@ class PythonSecurityVisitor(ast.NodeVisitor):
         elif isinstance(node.func, ast.Attribute):
             name = node.func.attr
 
-        if name in {"eval", "exec"}:
+        if name in {"eval", "exec", "compile", "__import__"}:
             # v0.12.3 — bare-call boundary on the Python AST path too.
             # The v0.9.0 JS/TS fix required a bare call boundary for the
             # same reason: a receiver call (PyTorch Module.eval(),
-            # sqlite exec, ...) is a method on an object, not the
-            # eval()/exec() builtins. The 100-repo field benchmark
-            # caught AutoModel.from_pretrained(...).eval() flagged as
-            # dynamic code execution in a real repository.
+            # sqlite exec, re.compile, ...) is a method on an object,
+            # not the builtins. The 100-repo field benchmark caught
+            # AutoModel.from_pretrained(...).eval() flagged as dynamic
+            # code execution in a real repository.
+            # Golden-set wave (RULE_ACCURACY.md): bare compile() and
+            # __import__() are dynamic code execution like eval/exec —
+            # the bare-call boundary keeps re.compile / obj.compile
+            # quiet. FIELD correction (10-repo run): __import__ with a
+            # CONSTANT module name is the standard lazy-import idiom
+            # (8/8 measured sites) — only a variable/computed module
+            # name is code execution from data.
             if isinstance(node.func, ast.Name):
-                self.add(
-                    node, "dynamic-execution", "high",
-                    "Dynamic code execution detected."
-                )
+                if name == "__import__" and node.args and isinstance(
+                        node.args[0], ast.Constant):
+                    pass
+                else:
+                    self.add(
+                        node, "dynamic-execution", "high",
+                        "Dynamic code execution detected."
+                    )
 
         # v0.9.0 P0: os.system / os.popen only — Message.system(...) and
         # platform.system() are not command execution.
@@ -277,6 +302,29 @@ class PythonSecurityVisitor(ast.NodeVisitor):
                 node, "process-execution", "medium",
                 "Process execution requires security review."
             )
+
+        # Golden-set wave: shell=True is a shell boundary on EVERY
+        # subprocess launcher, not only .run — call/Popen/check_call/
+        # check_output/getoutput carry the identical injection risk
+        # (Bandit B602/B603 family). Receiver must be subprocess-rooted:
+        # obj.run(shell=True) on arbitrary objects is not a shell.
+        if (
+            name in {"run", "Popen", "call", "check_call", "check_output",
+                     "getoutput", "getstatusoutput"}
+            and isinstance(node.func, ast.Attribute)
+            and self._root_name(node.func.value) == "subprocess"
+        ):
+            for keyword in node.keywords:
+                if (
+                    keyword.arg == "shell"
+                    and isinstance(keyword.value, ast.Constant)
+                    and keyword.value.value is True
+                ):
+                    self.add(
+                        node, "shell-true", "high",
+                        "Subprocess shell execution may introduce "
+                        "command injection risks."
+                    )
 
         # v0.14.0-dev PoC — flow 2 (input()/sys.argv -> subprocess):
         # fires ONLY on a confirmed source-to-sink path, so a clean
@@ -303,36 +351,37 @@ class PythonSecurityVisitor(ast.NodeVisitor):
                     )
                     break
 
-        if name == "run" and isinstance(node.func, ast.Attribute):
-            for keyword in node.keywords:
-                if (
-                    keyword.arg == "shell"
-                    and isinstance(keyword.value, ast.Constant)
-                    and keyword.value.value is True
-                ):
-                    self.add(
-                        node, "shell-true", "high",
-                        "Subprocess shell execution may introduce "
-                        "command injection risks."
-                    )
-
         # -- v0.9.0 P1 rules ---------------------------------------------
 
         # unsafe-deserialization: pickle.loads / dill.load / marshal.loads…
+        # Golden-set wave: shelve.open deserializes values via pickle on
+        # access — same arbitrary-code family, added to recall.
+        deser_root = (
+            self._root_name(node.func.value)
+            if isinstance(node.func, ast.Attribute) else None
+        )
         if (
-            name in {"load", "loads"}
-            and isinstance(node.func, ast.Attribute)
-            and self._root_name(node.func.value) in UNSAFE_DESERIALIZERS
+            isinstance(node.func, ast.Attribute)
+            and (
+                (name in {"load", "loads"}
+                 and deser_root in UNSAFE_DESERIALIZERS)
+                or (name == "open" and deser_root == "shelve")
+            )
         ):
             self.add(
                 node, "unsafe-deserialization", "high",
                 "Deserializing untrusted data with %s can execute "
-                "arbitrary code." % self._root_name(node.func.value)
+                "arbitrary code." % deser_root
             )
 
         # yaml-unsafe-load: yaml.load without a SafeLoader.
+        # Golden-set wave: yaml.unsafe_load added (it is UnsafeLoader —
+        # strictly more dangerous than bare load). yaml.full_load() is
+        # deliberately NOT flagged: FullLoader is a PyYAML mitigation
+        # (documented decision, RULE_ACCURACY.md); load(Loader=
+        # FullLoader) stays flagged for Bandit B506 parity.
         if (
-            name == "load"
+            name in {"load", "unsafe_load"}
             and isinstance(node.func, ast.Attribute)
             and self._root_name(node.func.value) == "yaml"
         ):
@@ -355,13 +404,22 @@ class PythonSecurityVisitor(ast.NodeVisitor):
                 )
 
         # sql-injection: execute() with concatenated / f-string SQL.
+        # Golden-set wave: "...{}".format(x) on a string literal added —
+        # the identical value-injection shape as concat/f-string.
         if (
             name in {"execute", "executemany", "executescript"}
             and isinstance(node.func, ast.Attribute)
             and node.args
         ):
             arg0 = node.args[0]
-            injectable = isinstance(arg0, ast.BinOp) or (
+            format_call = (
+                isinstance(arg0, ast.Call)
+                and isinstance(arg0.func, ast.Attribute)
+                and arg0.func.attr == "format"
+                and isinstance(arg0.func.value, ast.Constant)
+                and isinstance(arg0.func.value.value, str)
+            )
+            injectable = isinstance(arg0, ast.BinOp) or format_call or (
                 isinstance(arg0, ast.JoinedStr)
                 and _fstring_has_value_interpolation(arg0)
             )
@@ -503,15 +561,21 @@ class PythonSecurityVisitor(ast.NodeVisitor):
         # tarfile-extractall (B202-equiv): extractall without a PEP 706
         # safe filter. zipfile receivers are NOT flagged — tar symlink
         # traversal does not apply to the zip format (documented
-        # deviation from Bandit recall).
+        # deviation from Bandit recall). Golden-set wave: the carve-out
+        # now also covers a DIRECT zipfile.ZipFile(...) call receiver,
+        # not only bound variables (measured FP, fixed).
         if name == "extractall" and isinstance(node.func, ast.Attribute):
             filt = self._kwarg(node, "filter")
             filter_safe = (isinstance(filt, ast.Constant)
                            and isinstance(filt.value, str)
                            and filt.value in TARFILE_SAFE_FILTERS)
             receiver_root = self._root_name(node.func.value)
-            if receiver_root not in ({"zipfile"} | self.zipfile_vars) \
-                    and not filter_safe:
+            direct_zip_call = (
+                isinstance(node.func.value, ast.Call)
+                and self._root_name(node.func.value.func) == "zipfile"
+            )
+            if (receiver_root not in ({"zipfile"} | self.zipfile_vars)
+                    and not direct_zip_call and not filter_safe):
                 self.add(
                     node, "tarfile-extractall", "high",
                     "extractall without filter= can write outside the "
@@ -691,7 +755,8 @@ def analyze_file(path, root, custom_rules=()):
                 })
 
     for number, line in enumerate(content.splitlines(), 1):
-        match = SECRET_PATTERN.search(line)
+        match = (SECRET_PATTERN.search(line)
+                 or SECRET_PATTERN_BARE.search(line))
         if match and not _is_placeholder(match.group("value")):
             findings.append({
                 "file": str(path.relative_to(root)),

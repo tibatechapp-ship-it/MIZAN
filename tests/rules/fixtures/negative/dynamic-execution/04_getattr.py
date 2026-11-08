@@ -1,0 +1,1 @@
+handler = getattr(obj, "handle")
