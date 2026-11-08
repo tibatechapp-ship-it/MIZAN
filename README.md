@@ -189,18 +189,17 @@ display layer for governance visibility, explicitly not a GRC platform.
 
 ## Project status
 
-**Current release: Version 0.14.0-dev** — the measurement wave: taint
-analysis PoC (two measured source families, two dataflow rules that fire
-ONLY on confirmed source-to-sink paths), `mizan scan-remote` (GitHub
-Tarball API under five strict extraction filters — the 100-repo field
-benchmark runs through it, not `git clone`), and `mizan report` (local
-disclosure toolkit behind a mandatory manual triage gate; no publish
-command ships). Golden rule-accuracy suite: 20 security rules ×
-(5 positive + 5 negative) + 16 edge cases — 100/100 + 100/100 after
-seven diagnosed recall gaps and one measured FP were fixed; the 10-repo
-field run had every finding hand-classified (55 true / 2
-context-dependent / 10 false positives, each with a named root cause —
-`tests/rules/results/RULE_ACCURACY.md`). 555 tests green. Read-only,
+**Current release: Version 0.14.0** — the field-hardening wave on top of
+the measurement toolkit: a 50-repo `scan-remote` campaign (2026-11-08,
+Python/TypeScript AI repos) measured the engine end-to-end and fixed what
+it broke: internal tarball symlinks now materialize safely (out-of-tree
+targets still rejected — 15/50 pre-fix aborts → 0), oversize assets skip
+and record instead of aborting, `owner/repo` validation accepts exactly
+GitHub's name rules, the dynamic IN-clause placeholder idiom no longer
+fires sql-injection, and test-fixture secrets/dynamic-exec findings (89% /
+70% of those rules' field populations) downgrade to `low` — nothing is
+dropped. Golden rule-accuracy suite: 20 security rules × (5 positive + 5
+negative) + 16 edge cases — 100/100 + 100/100; 471 tests green. Read-only,
 offline, as always.
 
 **Suppression policy (please read before CI integration): MIZAN does not
@@ -218,10 +217,16 @@ Only findings whose fingerprint is not in the baseline reach the gate.
 
 ## Evolution
 
-- **v0.14.0-dev** — measurement wave: taint-analysis PoC with fixpoint
-  propagation (`request-to-sql`, `input-to-subprocess` — dataflow, not
-  shape), `mizan scan-remote` (Tarball API + five strict extraction
-  filters), `mizan report` (triage-gated local disclosure drafts, three
+- **v0.14.0** — field-hardening wave (50-repo scan-remote campaign,
+  2026-11-08): scan-remote safe materialization of INTERNAL tarball
+  symlinks + skip-and-record oversize assets (15 pre-fix aborts on real
+  repos → 0), GitHub-exact owner/repo validation, sql-injection FP fix
+  for the dynamic IN-clause placeholder idiom, and a measured test-path
+  severity downgrade for the two line-regex rules — plus everything from
+  the dev wave: taint-analysis PoC with fixpoint propagation
+  (`request-to-sql`, `input-to-subprocess` — dataflow, not shape),
+  `mizan scan-remote` (Tarball API + strict extraction filters),
+  `mizan report` (triage-gated local disclosure drafts, three
   secret-safety layers, no publish command), and a golden rule-accuracy
   suite (`tests/rules/`) that measured every rule before changing any:
   93→100 recall, the duplicate-finding bug it caught in the field, and
