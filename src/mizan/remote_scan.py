@@ -4,14 +4,22 @@ ROADMAP action (P1.3 field measurement): the 100-repo field measurement MUST
 run through ``mizan scan-remote`` — never ``git clone``. A tarball has no
 ``.git`` directory, no hooks, and a strictly bounded extraction surface.
 
-Security model (documented in docs/REMOTE_SCAN.md — the five filters):
+Security model (documented in docs/REMOTE_SCAN.md — the five filters,
+v0.14.0 field-measurement revision, 2026-11-08 campaign, 50 repos):
 
-  1. No linked members      — symlink OR hardlink members are rejected.
+  1. Linked members only INSIDE the tree — a symlink/hardlink whose target
+                              resolves strictly inside the extraction tree
+                              is materialized (recreated as the same link
+                              kind); any absolute, drive-prefixed, or
+                              ``..``-escaping target is rejected.
   2. No ``..`` components   — any path containing a ``..`` segment is rejected.
   3. No absolute paths      — member names starting with ``/`` (or a Windows
                               drive prefix) are rejected.
   4. Max 10 MB per file     — a member whose declared size exceeds the cap
-                              is rejected; the read loop re-enforces the cap.
+                              is SKIPPED (not written, not scanned) and
+                              recorded in ``remote.skipped_oversize`` —
+                              the scan continues; the read loop still
+                              re-enforces the cap for written files.
   5. Immediate deletion     — the extracted tree lives in a private temp
                               directory that is removed in a ``finally``
                               block, on success AND on rejection.
@@ -24,8 +32,13 @@ Defense-in-depth (documented, beyond the five filters):
                               ``extractfile`` after passing every filter;
                               ``tarfile.extractall`` is not called anywhere.
   8. Strict owner/repo shape — the CLI argument must match
-                              ``owner/repo`` or it is rejected before any
-                              network call.
+                              ``owner/repo`` with GitHub-valid name
+                              characters (``[A-Za-z0-9._-]``, segments may
+                              not be ``.`` or ``..``) or it is rejected
+                              before any network call. Field measurement
+                              2026-11-08: repo names CAN start with ``-``
+                              (e.g. ``lxc248/-interestseed``) — the shape
+                              check now accepts exactly what GitHub does.
 
 Rejection is fail-loud: a violating member aborts the whole extraction
 (partial tree deleted), ``RemoteScanError`` carries the reason, and the CLI
@@ -54,6 +67,7 @@ __all__ = [
     "extract_tarball",
     "scan_remote",
     "validate_owner_repo",
+    "link_resolves_inside",
 ]
 
 # --- documented limits -------------------------------------------------
@@ -63,7 +77,14 @@ MAX_TOTAL_BYTES = 512 * 1024 * 1024      # guard 6b: total uncompressed cap
 
 _CHUNK = 1024 * 1024
 
-_OWNER_REPO_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*$")
+# GitHub-valid name characters; a segment may not BE "." or ".." (path
+# safety — checked against both "/" and end-of-string), but MAY start with
+# "-" or "." — real repos exist with such names (field-measured:
+# lxc248/-interestseed, the .github convention).
+_OWNER_REPO_RE = re.compile(
+    r"^(?!\.(/|$))(?!\.\.(/|$))[A-Za-z0-9._-]+"
+    r"/(?!\.(/|$))(?!\.\.(/|$))[A-Za-z0-9._-]+$"
+)
 
 
 class RemoteScanError(Exception):
@@ -92,6 +113,32 @@ def _member_name_safe(name: str) -> bool:
     return ".." not in parts
 
 
+def link_resolves_inside(member) -> bool:
+    """Filter 1 (v0.14.0): True when a linked member's target resolves
+    strictly INSIDE the extraction tree.
+
+    Pure path algebra on tar member names (no filesystem access): the
+    target is joined onto the member's directory and normalized; any
+    result that escapes the root (leading ``..``), or an absolute /
+    drive-prefixed target, is out-of-tree. Out-of-tree targets stay
+    fail-loud rejections — the escape property is preserved.
+    """
+    target = member.linkname or ""
+    if not target or "\x00" in target:
+        return False
+    if target.startswith("/") or target.startswith("\\"):
+        return False
+    if re.match(r"^[A-Za-z]:", target):  # Windows drive prefix
+        return False
+    base = posixpath.dirname(member.name.rstrip("/"))
+    resolved = posixpath.normpath(posixpath.join(base, target))
+    if resolved == ".." or resolved.startswith("../"):
+        return False
+    if posixpath.isabs(resolved):
+        return False
+    return True
+
+
 def _reject(reason: str):
     raise RemoteScanError(reason)
 
@@ -99,39 +146,91 @@ def _reject(reason: str):
 def extract_tarball(fileobj, dest_dir: str) -> dict:
     """Extract a tarball fileobj into dest_dir under the strict filters.
 
-    Returns stats: {"files": int, "bytes": int}. Any filter violation raises
-    :class:`RemoteScanError` (fail-loud; the caller deletes dest_dir).
+    Returns stats: {"files": int, "bytes": int, "skipped_oversize": list,
+    "links": int}. Any filter violation raises :class:`RemoteScanError`
+    (fail-loud; the caller deletes dest_dir). Oversize members (filter 4)
+    are skipped and recorded instead of aborting — v0.14.0 field change.
     """
     files = 0
     total = 0
+    links = 0
+    skipped = []
     dest_real = os.path.realpath(dest_dir)
     with tarfile.open(fileobj=fileobj, mode="r:*") as tar:
         for member in tar:
             name = member.name
-            # filter 1: no linked members (symlink or hardlink)
-            if member.issym():
-                _reject(f"rejected: symlink member {name!r} -> "
-                        f"{member.linkname!r}")
-            if member.islnk():
-                _reject(f"rejected: hardlink member {name!r} -> "
-                        f"{member.linkname!r}")
+            # filter 1: linked members materialize ONLY when the target
+            # resolves inside the tree; out-of-tree targets stay rejected
+            if member.issym() or member.islnk():
+                kind = "symlink" if member.issym() else "hardlink"
+                if not link_resolves_inside(member):
+                    _reject(
+                        f"rejected: {kind} member {name!r} -> "
+                        f"{member.linkname!r} (target resolves outside "
+                        "the extraction tree)"
+                    )
+                out_path = os.path.join(dest_dir, name)
+                parent = os.path.dirname(out_path)
+                if parent:
+                    os.makedirs(parent, exist_ok=True)
+                # containment double-check through the future link path
+                real = os.path.realpath(out_path)
+                if real != dest_real and not real.startswith(dest_real + os.sep):
+                    _reject(f"rejected: member escapes destination {name!r}")
+                try:
+                    if member.issym():
+                        os.symlink(member.linkname, out_path)
+                    else:
+                        target_fs = os.path.normpath(os.path.join(
+                            dest_dir,
+                            posixpath.normpath(posixpath.join(
+                                posixpath.dirname(name), member.linkname))))
+                        target_real = os.path.realpath(target_fs)
+                        if (target_real != dest_real
+                                and not target_real.startswith(
+                                    dest_real + os.sep)):
+                            _reject(
+                                f"rejected: hardlink member {name!r} -> "
+                                f"{member.linkname!r} (target outside tree)"
+                            )
+                        if not os.path.exists(target_real):
+                            _reject(
+                                f"rejected: hardlink member {name!r} -> "
+                                f"{member.linkname!r} (target not yet "
+                                "extracted)"
+                            )
+                        os.link(target_real, out_path)
+                except OSError as exc:
+                    _reject(f"rejected: cannot materialize {kind} member "
+                            f"{name!r}: {exc}")
+                # belt-and-suspenders: the created link must stay inside
+                real = os.path.realpath(out_path)
+                if real != dest_real and not real.startswith(dest_real + os.sep):
+                    try:
+                        os.unlink(out_path)
+                    except OSError:
+                        pass
+                    _reject(f"rejected: {kind} member {name!r} escapes "
+                            "destination after materialization")
+                links += 1
+                continue
             # defense-in-depth: no devices/fifos
             if member.isdev() or member.isfifo():
                 _reject(f"rejected: special member {name!r}")
             # filters 2+3: no .., no absolute path
             if not _member_name_safe(name):
                 _reject(f"rejected: unsafe member path {name!r}")
-            # filter 4: per-file cap (declared size)
-            if member.size > MAX_FILE_BYTES:
-                _reject(
-                    f"rejected: member {name!r} is {member.size} bytes "
-                    f"(limit {MAX_FILE_BYTES})"
-                )
             if member.isdir():
                 os.makedirs(os.path.join(dest_dir, name), exist_ok=True)
                 continue
             if not member.isfile():
                 _reject(f"rejected: unsupported member type {name!r}")
+            # filter 4: per-file cap (declared size) — SKIP + record, do
+            # not abort (v0.14.0: 3/50 campaign repos aborted on >10MB
+            # media/data assets; assets are outside the scan surface)
+            if member.size > MAX_FILE_BYTES:
+                skipped.append({"name": name, "size": member.size})
+                continue
             src = tar.extractfile(member)
             if src is None:
                 _reject(f"rejected: unreadable member {name!r}")
@@ -163,7 +262,8 @@ def extract_tarball(fileobj, dest_dir: str) -> dict:
                         )
                     out.write(chunk)
             files += 1
-    return {"files": files, "bytes": total}
+    return {"files": files, "bytes": total, "skipped_oversize": skipped,
+            "links": links}
 
 
 def fetch_tarball(owner_repo: str, ref: str = None,
@@ -229,6 +329,8 @@ def scan_remote(owner_repo: str, ref: str = None, category: str = "all",
             "tarball_bytes": len(data),
             "extracted_files": stats["files"],
             "extracted_bytes": stats["bytes"],
+            "linked_members": stats["links"],
+            "skipped_oversize": stats["skipped_oversize"],
             "extracted_tree_deleted": True,
         }
         return result

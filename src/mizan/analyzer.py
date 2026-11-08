@@ -128,6 +128,23 @@ UNSAFE_DESERIALIZERS = frozenset({
     "pickle", "cPickle", "marshal", "dill", "shelve",
 })
 
+# v0.14.0 field-measured (2026-11-08, 50-repo scan-remote campaign):
+# 2999/3374 (89%) of hardcoded-secret-candidate and 272/387 (70%) of
+# dynamic-execution findings sit in test-fixture paths. Test fixtures are
+# not credential leaks and not production dynamic execution. The finding
+# STAYS in the report (fail-loud contract intact — nothing is dropped)
+# but its severity is downgraded to "low" so gates stay signal-bearing.
+TEST_PATH_PATTERN = re.compile(
+    r"(^|/)(tests?|__tests__|specs?|fixtures|smoke|mocks?|testdata)(/|\.|$)"
+    r"|\.(test|spec)\.[a-z]+$|_test\.[a-z]+$|(^|/)test_[^/]*\.py$"
+)
+
+# The two line-regex rules whose field FP population is dominated by test
+# fixtures — the only rules the test-path downgrade applies to.
+TEST_DOWNGRADED_RULES = frozenset({
+    "hardcoded-secret-candidate", "dynamic-execution",
+})
+
 # v0.13.0 Bandit-parity wave 1 (B113-equiv): HTTP verb methods audited for
 # a missing `timeout` keyword on literal `requests.*` receivers.
 HTTP_VERB_METHODS = frozenset({
@@ -166,9 +183,53 @@ _SQL_VALUE_TAIL = re.compile(
 )
 
 
-def _fstring_has_value_interpolation(node):
+def _is_placeholder_builder(node):
+    """True for the dynamic IN-clause placeholder idiom: expressions that
+    can only ever produce '?' text or an integer count — e.g.
+    ``",".join("?" * len(STATUSES))``. Field-measured (v0.14.0, 2026-11-08
+    campaign + MIZAN self-scan report/timeline.py:121): interpolating such
+    values into a query that is already parameterized leaves nothing
+    injectable, but the old rule flagged the site as high severity.
+    Deliberately FALSE for every Name not tracked as builder-bound, every
+    unknown call, and anything request-shaped — the taint rule
+    (request-to-sql) still covers tainted sites.
+    """
+    if isinstance(node, ast.Call):
+        func = node.func
+        # len(...) always returns an int — a count cannot carry SQL syntax
+        if isinstance(func, ast.Name) and func.id == "len" and len(node.args) == 1:
+            return True
+        # "sep".join(<builder parts>) — placeholder text assembly
+        if (isinstance(func, ast.Attribute) and func.attr == "join"
+                and isinstance(func.value, ast.Constant)
+                and isinstance(func.value.value, str)
+                and all(_is_placeholder_builder(a) for a in node.args)):
+            return True
+        return False
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mult):
+        left_q = (isinstance(node.left, ast.Constant)
+                  and isinstance(node.left.value, str)
+                  and set(node.left.value) <= {"?"})
+        right_q = (isinstance(node.right, ast.Constant)
+                   and isinstance(node.right.value, str)
+                   and set(node.right.value) <= {"?"})
+        if left_q and _is_placeholder_builder(node.right):
+            return True
+        if right_q and _is_placeholder_builder(node.left):
+            return True
+        return False
+    if isinstance(node, ast.Constant):
+        return (isinstance(node.value, str)
+                and set(node.value) <= {"?"})
+    return False
+
+
+def _fstring_has_value_interpolation(node, placeholder_vars=None):
     """True when any f-string interpolation lands in a SQL value position
-    and the interpolated expression is not an ALL_CAPS constant."""
+    and the interpolated expression is not an ALL_CAPS constant and not a
+    placeholder-builder (dynamic IN-clause idiom, see
+    _is_placeholder_builder / builder-bound names)."""
+    placeholder_vars = placeholder_vars or set()
     literal_before = ""
     for part in node.values:
         if isinstance(part, ast.Constant):
@@ -181,7 +242,12 @@ def _fstring_has_value_interpolation(node):
         ) or (
             isinstance(expr, ast.Attribute) and expr.attr.isupper()
         )
-        if not expr_is_const and _SQL_VALUE_TAIL.search(literal_before):
+        expr_is_builder = (
+            (isinstance(expr, ast.Name) and expr.id in placeholder_vars)
+            or _is_placeholder_builder(expr)
+        )
+        if (not expr_is_const and not expr_is_builder
+                and _SQL_VALUE_TAIL.search(literal_before)):
             return True
         literal_before = ""
     return False
@@ -191,12 +257,16 @@ class PythonSecurityVisitor(ast.NodeVisitor):
     """Detect security-sensitive Python constructs."""
 
     def __init__(self, tainted_names=None, zipfile_vars=None,
-                 request_tainted=None):
+                 request_tainted=None, placeholder_vars=None):
         self.findings = []
         self.tainted_names = tainted_names or set()
         # v0.14.0-dev PoC: plain names tainted by ``request.*`` data
         # (Flask/Django request attributes), used by ``request-to-sql``.
         self.request_tainted = request_tainted or set()
+        # v0.14.0: names bound to dynamic-IN placeholder builders (e.g.
+        # placeholders = ",".join("?" * len(STATUSES))) — exempted from the
+        # f-string sql-injection shape; pre-pass collected per file.
+        self.placeholder_vars = placeholder_vars or set()
         # v0.13.0: variable names assigned from zipfile.* constructors —
         # B202-equiv scope carve-out (tar symlink traversal does not apply
         # to the zip format).
@@ -421,7 +491,8 @@ class PythonSecurityVisitor(ast.NodeVisitor):
             )
             injectable = isinstance(arg0, ast.BinOp) or format_call or (
                 isinstance(arg0, ast.JoinedStr)
-                and _fstring_has_value_interpolation(arg0)
+                and _fstring_has_value_interpolation(
+                    arg0, self.placeholder_vars)
             )
             if injectable:
                 self.add(
@@ -622,6 +693,24 @@ class PythonSecurityVisitor(ast.NodeVisitor):
                     self._check_tmp_value(node, elt.value)
 
 
+def _collect_placeholder_vars(tree):
+    """Names bound to dynamic-IN placeholder builders (v0.14.0 sql-injection
+    FP fix): ``placeholders = ",".join("?" * len(TERMINAL))`` shapes — the
+    dynamic IN-clause idiom. Bounded: direct Assign/AnnAssign targets only.
+    """
+    names = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and _is_placeholder_builder(node.value):
+            for tgt in node.targets:
+                if isinstance(tgt, ast.Name):
+                    names.add(tgt.id)
+        elif (isinstance(node, ast.AnnAssign) and node.value is not None
+                and _is_placeholder_builder(node.value)
+                and isinstance(node.target, ast.Name)):
+            names.add(node.target.id)
+    return names
+
+
 def _collect_zipfile_vars(tree):
     """Names bound to zipfile.* instances (B202-equiv scope carve-out):
     assignment targets AND with-item bindings."""
@@ -721,6 +810,7 @@ def analyze_file(path, root, custom_rules=()):
                 tainted_names=_collect_input_taints(tree),
                 zipfile_vars=_collect_zipfile_vars(tree),
                 request_tainted=_collect_request_taints(tree),
+                placeholder_vars=_collect_placeholder_vars(tree),
             )
             visitor.visit(tree)
 
@@ -729,7 +819,6 @@ def analyze_file(path, root, custom_rules=()):
                     "file": str(path.relative_to(root)),
                     **item,
                 })
-
         except SyntaxError as exc:
             findings.append({
                 "file": str(path.relative_to(root)),
@@ -775,6 +864,21 @@ def analyze_file(path, root, custom_rules=()):
                 "severity": "info",
                 "message": "Unresolved development marker.",
             })
+
+    # v0.14.0 field-measured downgrade: in test-fixture paths the two
+    # line-regex rules fire overwhelmingly on fixtures (89% secrets /
+    # 70% dynamic-execution in the 2026-11-08 campaign). The findings
+    # REMAIN in the report — only the severity drops to "low"; nothing
+    # is silently dropped and the fail-loud contract is intact.
+    try:
+        rel_posix = path.relative_to(root).as_posix().lower()
+    except ValueError:
+        rel_posix = path.as_posix().lower()
+    if TEST_PATH_PATTERN.search(rel_posix):
+        for item in findings:
+            if (item.get("rule") in TEST_DOWNGRADED_RULES
+                    and item.get("severity") == "high"):
+                item["severity"] = "low"
 
     if custom_rules:
         findings.extend(apply_custom_rules(

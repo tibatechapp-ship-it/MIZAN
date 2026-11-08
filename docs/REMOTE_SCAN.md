@@ -15,14 +15,16 @@ tree immediately afterwards.
 
 ## The five extraction filters
 
-Any member violating a filter aborts the whole extraction (fail-loud):
+Any member violating a filter aborts the whole extraction (fail-loud),
+with two field-measured refinements (v0.14.0 — 2026-11-08, 50-repo
+campaign: 15/50 pre-fix aborts, all in MIZAN's own code, 0 after):
 
 | # | Filter | Behavior |
 |---|--------|----------|
-| 1 | **No symlinks** — and no hardlinks (linked members generally) | `RemoteScanError`; extraction aborted |
+| 1 | **Linked members only INSIDE the tree** — a symlink/hardlink whose target resolves strictly inside the extraction tree is materialized (same link kind); absolute, drive-prefixed, or `..`-escaping targets are rejected | inside: materialized · outside: `RemoteScanError`; extraction aborted |
 | 2 | **No `..` path components** — e.g. `pkg/../../etc/passwd` | `RemoteScanError`; extraction aborted |
 | 3 | **No absolute paths** — `/etc/passwd`, `\…`, `C:\…` | `RemoteScanError`; extraction aborted |
-| 4 | **Max 10 MB per file** — declared member size, re-enforced while reading | `RemoteScanError`; extraction aborted |
+| 4 | **Max 10 MB per file** — declared member size, re-enforced while reading. Oversize members are SKIPPED (never written, never scanned) and recorded in `remote.skipped_oversize` — the scan continues | skip + record (v0.14.0) |
 | 5 | **Immediate deletion** — the extracted tree lives in a private temp directory removed in a `finally` block | deleted on success, rejection, and scanner failure |
 
 ## Defense-in-depth (beyond the five filters)
@@ -34,8 +36,10 @@ Any member violating a filter aborts the whole extraction (fail-loud):
   called anywhere in MIZAN.
 - **Containment double-check**: after normalization, every written path is
   verified to stay inside the destination directory.
-- **Strict `owner/repo` shape**: the CLI argument must match
-  `^[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*$` — rejected
+- **Strict `owner/repo` shape**: the CLI argument must match GitHub's own
+  name rules — segments of `[A-Za-z0-9._-]`, no segment may be `.` or
+  `..`, leading `-`/`.` accepted (field-measured: `lxc248/-interestseed`,
+  the `.github` convention) — rejected
   before any network call.
 - **No special members**: devices and FIFOs are rejected.
 
@@ -68,6 +72,10 @@ same engine version) augmented with a `remote` block:
   "tarball_bytes": 1234567,
   "extracted_files": 42,
   "extracted_bytes": 987654,
+  "linked_members": 3,
+  "skipped_oversize": [
+    {"name": "assets/demo.mp4", "size": 44813108}
+  ],
   "extracted_tree_deleted": true
 }
 ```

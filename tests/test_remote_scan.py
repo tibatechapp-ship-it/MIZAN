@@ -1,13 +1,18 @@
-"""Remote-scan safe-extraction suite (v0.14.0-dev, docs/REMOTE_SCAN.md).
+"""Remote-scan safe-extraction suite (v0.14.0, docs/REMOTE_SCAN.md).
 
-Contract under test (the five documented filters):
-  1. symlink (and hardlink) members are rejected;
+Contract under test (the five documented filters, field-measurement
+revision 2026-11-08 — 50-repo campaign, 15/50 aborts diagnosed):
+  1. linked members (symlink/hardlink) are materialized ONLY when the
+     target resolves strictly inside the extraction tree; out-of-tree
+     targets (absolute, drive-prefixed, ``..``-escaping) are rejected;
   2. ``..`` path components are rejected (``../../etc/passwd``);
   3. absolute member paths are rejected;
-  4. members over 10 MB are rejected (huge-tarball case);
+  4. members over 10 MB are SKIPPED + recorded (``skipped_oversize``) —
+     the scan continues; written files still re-enforce the cap;
   5. the extracted tree is deleted immediately — on success AND rejection.
 
-Plus the strict owner/repo shape check (rejected before any network call).
+Plus the strict owner/repo shape check (rejected before any network call),
+now accepting exactly GitHub's own name rules (leading ``-``/``.``).
 
 Tarballs are built in-memory (io.BytesIO); no test touches the network —
 ``fetch_tarball`` is monkeypatched for the end-to-end cases.
@@ -84,7 +89,7 @@ class ExtractFilterTests(unittest.TestCase):
         import shutil
         shutil.rmtree(self.dest, ignore_errors=True)
 
-    def test_symlink_member_rejected(self):
+    def test_out_of_tree_symlink_rejected(self):
         tarball = make_tar([
             {"name": "ok.py", "data": b"x = 1\n"},
             {"name": "escape", "link": "/etc"},
@@ -92,11 +97,55 @@ class ExtractFilterTests(unittest.TestCase):
         with self.assertRaises(RemoteScanError) as ctx:
             extract_tarball(io.BytesIO(tarball), self.dest)
         self.assertIn("symlink", str(ctx.exception))
+        self.assertIn("outside", str(ctx.exception))
 
-    def test_hardlink_member_rejected(self):
+    def test_parent_escape_symlink_rejected(self):
+        # the field-measured attack shape: a benign-looking relative link
+        # whose .. chain climbs out of the tree
+        tarball = make_tar([
+            {"name": "ok.py", "data": b"x = 1\n"},
+            {"name": "sub/escape", "link": "../../outside"},
+        ])
+        with self.assertRaises(RemoteScanError) as ctx:
+            extract_tarball(io.BytesIO(tarball), self.dest)
+        self.assertIn("symlink", str(ctx.exception))
+
+    def test_internal_symlink_materialized(self):
+        # the field-measured benign shapes (9/50 campaign aborts):
+        #   CLAUDE.md -> AGENTS.md        (sibling file link)
+        #   .claude/skills -> ../.agents/skills   (.. INSIDE the tree)
+        tarball = make_tar([
+            {"name": "AGENTS.md", "data": b"# agents\n"},
+            {"name": "CLAUDE.md", "link": "AGENTS.md"},
+            {"name": ".agents/skills/x.md", "data": b"skill\n"},
+            {"name": ".claude/skills", "link": "../.agents/skills"},
+        ])
+        stats = extract_tarball(io.BytesIO(tarball), self.dest)
+        self.assertEqual(stats["links"], 2)
+        root = Path(self.dest)
+        self.assertTrue((root / "CLAUDE.md").is_symlink())
+        self.assertEqual(
+            (root / "CLAUDE.md").read_text(), "# agents\n")
+        self.assertTrue((root / ".claude" / "skills").is_symlink())
+        # reading THROUGH the internal link stays inside and correct
+        self.assertEqual(
+            (root / ".claude" / "skills" / "x.md").read_text(), "skill\n")
+
+    def test_internal_hardlink_materialized(self):
         tarball = make_tar([
             {"name": "a.py", "data": b"x = 1\n"},
             {"name": "b.py", "hard": "a.py"},
+        ])
+        stats = extract_tarball(io.BytesIO(tarball), self.dest)
+        self.assertEqual(stats["files"], 1)  # hardlink is not a new file
+        self.assertEqual(stats["links"], 1)
+        self.assertEqual(
+            (Path(self.dest) / "b.py").read_text(), "x = 1\n")
+
+    def test_dangling_out_of_tree_hardlink_rejected(self):
+        tarball = make_tar([
+            {"name": "a.py", "data": b"x = 1\n"},
+            {"name": "b.py", "hard": "../outside.txt"},
         ])
         with self.assertRaises(RemoteScanError) as ctx:
             extract_tarball(io.BytesIO(tarball), self.dest)
@@ -120,12 +169,22 @@ class ExtractFilterTests(unittest.TestCase):
             extract_tarball(io.BytesIO(tarball), self.dest)
         self.assertIn("unsafe member path", str(ctx.exception))
 
-    def test_huge_member_rejected(self):
+    def test_oversize_member_skipped_and_recorded(self):
         big = b"\x00" * (remote_scan.MAX_FILE_BYTES + 1)
-        tarball = make_tar([{"name": "big.bin", "data": big}])
-        with self.assertRaises(RemoteScanError) as ctx:
-            extract_tarball(io.BytesIO(tarball), self.dest)
-        self.assertIn("rejected: member", str(ctx.exception))
+        tarball = make_tar([
+            {"name": "assets/demo.mp4", "data": big},
+            {"name": "pkg/evil.py", "data": SMALL_PY},
+        ])
+        stats = extract_tarball(io.BytesIO(tarball), self.dest)
+        # the scan surface continues: the code file IS extracted
+        self.assertTrue(
+            (Path(self.dest) / "pkg" / "evil.py").is_file())
+        self.assertEqual(stats["files"], 1)
+        self.assertEqual(len(stats["skipped_oversize"]), 1)
+        skip = stats["skipped_oversize"][0]
+        self.assertEqual(skip["name"], "assets/demo.mp4")
+        self.assertEqual(skip["size"], remote_scan.MAX_FILE_BYTES + 1)
+        self.assertFalse((Path(self.dest) / "assets" / "demo.mp4").exists())
 
     def test_clean_tarball_extracts(self):
         stats = extract_tarball(io.BytesIO(clean_repo_tar()), self.dest)
@@ -138,10 +197,14 @@ class ExtractFilterTests(unittest.TestCase):
 
 class OwnerRepoValidationTests(unittest.TestCase):
     def test_shapes(self):
-        for ok in ("owner/repo", "zai-org/GLM-5", "a.b-c_d/e.f-g_h"):
+        for ok in ("owner/repo", "zai-org/GLM-5", "a.b-c_d/e.f-g_h",
+                   "lxc248/-interestseed",   # field-measured 2026-11-08
+                   ".github/.github",         # metadata-repo convention
+                   "a..b/x_y.z"):
             validate_owner_repo(ok)  # must not raise
         for bad in ("", "nodir", "a/b/c", "/abs", "own er/rep o",
-                    "../etc/passwd", "a/b ", None):
+                    "../etc/passwd", "../x", "a/..", "a/.", "./x",
+                    "a/../../x", "a/b ", None):
             with self.assertRaises(RemoteScanError):
                 validate_owner_repo(bad)
 
@@ -167,6 +230,29 @@ class ScanRemoteEndToEndTests(unittest.TestCase):
         )
         result = scan_remote("owner/repo")
         self.assertEqual(result["remote"]["repo"], "owner/repo")
+        self.assertEqual(result["remote"]["extracted_files"], 2)
+        self.assertEqual(result["remote"]["linked_members"], 0)
+        self.assertEqual(result["remote"]["skipped_oversize"], [])
+        self.assertTrue(result["remote"]["extracted_tree_deleted"])
+        rules = {f["rule"] for f in result.get("findings", [])}
+        self.assertIn("unsafe-deserialization", rules)
+
+    def test_success_with_internal_symlinks_and_oversize(self):
+        # end-to-end over the exact field-measured shapes: internal links
+        # materialize, oversize assets skip + record, the scan completes
+        tarball = make_tar([
+            {"name": "AGENTS.md", "data": b"# agents\n"},
+            {"name": "CLAUDE.md", "link": "AGENTS.md"},
+            {"name": "assets/demo.mp4",
+             "data": b"\x00" * (remote_scan.MAX_FILE_BYTES + 1)},
+            {"name": "pkg/evil.py", "data": SMALL_PY},
+        ])
+        remote_scan.fetch_tarball = (
+            lambda owner_repo, ref=None, token=None: tarball
+        )
+        result = scan_remote("owner/repo")
+        self.assertEqual(result["remote"]["linked_members"], 1)
+        self.assertEqual(len(result["remote"]["skipped_oversize"]), 1)
         self.assertEqual(result["remote"]["extracted_files"], 2)
         self.assertTrue(result["remote"]["extracted_tree_deleted"])
         rules = {f["rule"] for f in result.get("findings", [])}
