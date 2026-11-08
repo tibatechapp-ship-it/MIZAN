@@ -31,6 +31,16 @@ v0.13.0 — Bandit-parity wave 1 (docs/BANDIT_PARITY.md):
   hardcoded-tmp-path (B108). B101/B110/B112/B311/B607 are deliberately
   rejected as structural noise; every deviation from Bandit recall is
   documented in docs/BANDIT_PARITY.md.
+
+v0.14.0-dev — taint-analysis proof of concept (docs/ROADMAP.md P1.2):
+  Module ``taint.py`` propagates two measured source families (input():
+  ``input()``/``sys.argv``; request: ``request.<data-attr>`` chains) to
+  plain-name taint sets, and two new dataflow rules fire ONLY on a
+  confirmed source-to-sink path: ``request-to-sql`` (high) and
+  ``input-to-subprocess`` (high). The shallow single-pass
+  _collect_input_taints is replaced by the fixpoint engine (path-traversal
+  recall deepens; behavior remains additive — no existing finding is
+  removed).
 """
 
 import ast
@@ -40,6 +50,7 @@ import re
 from pathlib import Path
 
 from ._version import __version__
+from . import taint as _taint
 from .custom_rules import apply_custom_rules, load_custom_rules
 
 IGNORED_DIRS = {
@@ -165,9 +176,13 @@ def _fstring_has_value_interpolation(node):
 class PythonSecurityVisitor(ast.NodeVisitor):
     """Detect security-sensitive Python constructs."""
 
-    def __init__(self, tainted_names=None, zipfile_vars=None):
+    def __init__(self, tainted_names=None, zipfile_vars=None,
+                 request_tainted=None):
         self.findings = []
         self.tainted_names = tainted_names or set()
+        # v0.14.0-dev PoC: plain names tainted by ``request.*`` data
+        # (Flask/Django request attributes), used by ``request-to-sql``.
+        self.request_tainted = request_tainted or set()
         # v0.13.0: variable names assigned from zipfile.* constructors —
         # B202-equiv scope carve-out (tar symlink traversal does not apply
         # to the zip format).
@@ -263,6 +278,31 @@ class PythonSecurityVisitor(ast.NodeVisitor):
                 "Process execution requires security review."
             )
 
+        # v0.14.0-dev PoC — flow 2 (input()/sys.argv -> subprocess):
+        # fires ONLY on a confirmed source-to-sink path, so a clean
+        # subprocess call produces nothing (precision by construction).
+        # Escalates os.system/os.popen sites that already carry
+        # process-execution medium: tainted data makes them high.
+        if (
+            (
+                isinstance(node.func, ast.Attribute)
+                and self._root_name(node.func) == "subprocess"
+                and name in {"run", "Popen", "call", "check_call",
+                             "check_output", "getoutput", "getstatusoutput"}
+            )
+            or is_qualified_os or is_bare
+        ):
+            for arg in node.args:
+                if _taint.expr_tainted(arg, self.tainted_names,
+                                       _taint.is_input_source):
+                    self.add(
+                        node, "input-to-subprocess", "high",
+                        "Command string reaches a process sink from "
+                        "input()/sys.argv — injection path confirmed by "
+                        "dataflow."
+                    )
+                    break
+
         if name == "run" and isinstance(node.func, ast.Attribute):
             for keyword in node.keywords:
                 if (
@@ -331,6 +371,24 @@ class PythonSecurityVisitor(ast.NodeVisitor):
                     "SQL built by string concatenation or interpolation — "
                     "use parameterized queries."
                 )
+
+        # v0.14.0-dev PoC — flow 1 (request.* -> SQL): fires ONLY when the
+        # query argument is tainted by request data AND the shape is one
+        # the structural sql-injection rule does NOT already cover (those
+        # sites already fired above) — no duplicate finding per line.
+        if (
+            name in {"execute", "executemany", "executescript"}
+            and isinstance(node.func, ast.Attribute)
+            and node.args
+            and not injectable
+            and _taint.expr_tainted(node.args[0], self.request_tainted,
+                                    _taint.is_request_source)
+        ):
+            self.add(
+                node, "request-to-sql", "high",
+                "Query text reaches execute() from request.* data — "
+                "injection path confirmed by dataflow; parameterize."
+            )
 
         # path-traversal: open(<user-controlled path>).
         if name == "open" and node.args and not isinstance(
@@ -524,26 +582,20 @@ def _collect_zipfile_vars(tree):
 
 
 def _collect_input_taints(tree):
-    """Shallow single-pass taint: names assigned from input()/sys.argv.
+    """v0.14.0-dev: input()/sys.argv taint via the fixpoint engine.
 
-    Deliberately NOT deep taint analysis (explicitly out of scope for this
-    wave) — just enough to catch `open(name)` two lines after
-    `name = input()` without flagging every variable on earth.
+    Supersedes the v0.9.0 shallow single-pass version (direct assignment
+    only); behavior is a strict superset — every name the old pass found,
+    the fixpoint engine still finds, plus taint flowing through wrapper
+    expressions. Feeds the existing path-traversal rule and the new
+    input-to-subprocess dataflow rule.
     """
-    tainted = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Assign):
-            value = node.value
-            from_input = (
-                isinstance(value, ast.Call)
-                and isinstance(value.func, ast.Name)
-                and value.func.id == "input"
-            ) or PythonSecurityVisitor._is_sys_argv(value)
-            if from_input:
-                for target in node.targets:
-                    if isinstance(target, ast.Name):
-                        tainted.add(target.id)
-    return tainted
+    return _taint.propagate(tree, _taint.is_input_source)
+
+
+def _collect_request_taints(tree):
+    """v0.14.0-dev PoC: plain names tainted by ``request.*`` data."""
+    return _taint.propagate(tree, _taint.is_request_source)
 
 
 def _is_excluded(rel_posix, filename):
@@ -604,6 +656,7 @@ def analyze_file(path, root, custom_rules=()):
             visitor = PythonSecurityVisitor(
                 tainted_names=_collect_input_taints(tree),
                 zipfile_vars=_collect_zipfile_vars(tree),
+                request_tainted=_collect_request_taints(tree),
             )
             visitor.visit(tree)
 

@@ -39,6 +39,10 @@ PLUGINS = (
             "django-mark-safe",
             "tarfile-extractall",
             "hardcoded-tmp-path",
+            # v0.14.0-dev taint-analysis PoC (docs/ROADMAP.md P1.2):
+            # dataflow rules — fire only on a confirmed source->sink path.
+            "request-to-sql",
+            "input-to-subprocess",
         ),
     ),
     Plugin(
