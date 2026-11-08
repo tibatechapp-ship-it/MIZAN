@@ -2,7 +2,7 @@
 
 يتبع هذا المشروع [Keep a Changelog](https://keepachangelog.com/) ودلالات الإصدارات الدلالية (SemVer).
 
-## [غير مُصدر] — v0.14.0-dev — `scan-remote` (Tarball API مع استخراج آمن)
+## [0.14.0-dev] — 2026-11-08 — Taint PoC، scan-remote، بوابة الإفصاح، ودقة القواعد
 
 أمر جديد `mizan scan-remote OWNER/REPO [--ref REF]` — التنزيل عبر GitHub
 Tarball API، والاستخراج تحت خمسة فلاتر صارمة موثّقة في `docs/REMOTE_SCAN.md`:

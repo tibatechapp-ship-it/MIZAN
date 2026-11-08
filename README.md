@@ -189,15 +189,19 @@ display layer for governance visibility, explicitly not a GRC platform.
 
 ## Project status
 
-**Current release: Version 0.13.0** — the Bandit-parity wave: nine
-high-signal checks adopted by **reimplementation** in MIZAN's own AST
-engine (TLS `verify=False`, unverified SSL context, request-without-timeout,
-`torch.load`, `trust_remote_code=True`, `autoescape=False`, `mark_safe`,
-`tarfile` extractall, hardcoded `/tmp` paths) and five Bandit checks
-rejected as structural noise — the full adopt/reject/defer contract,
-deviations, and update cycle live in [`docs/BANDIT_PARITY.md`](docs/BANDIT_PARITY.md).
-420 tests green; field measurement on four local repositories: 16
-hand-checked hits, 0 false positives. Read-only, offline, as always.
+**Current release: Version 0.14.0-dev** — the measurement wave: taint
+analysis PoC (two measured source families, two dataflow rules that fire
+ONLY on confirmed source-to-sink paths), `mizan scan-remote` (GitHub
+Tarball API under five strict extraction filters — the 100-repo field
+benchmark runs through it, not `git clone`), and `mizan report` (local
+disclosure toolkit behind a mandatory manual triage gate; no publish
+command ships). Golden rule-accuracy suite: 20 security rules ×
+(5 positive + 5 negative) + 16 edge cases — 100/100 + 100/100 after
+seven diagnosed recall gaps and one measured FP were fixed; the 10-repo
+field run had every finding hand-classified (55 true / 2
+context-dependent / 10 false positives, each with a named root cause —
+`tests/rules/results/RULE_ACCURACY.md`). 555 tests green. Read-only,
+offline, as always.
 
 **Suppression policy (please read before CI integration): MIZAN does not
 honor `# nosec` comments.** A finding is never silently buried by a comment
@@ -214,6 +218,14 @@ Only findings whose fingerprint is not in the baseline reach the gate.
 
 ## Evolution
 
+- **v0.14.0-dev** — measurement wave: taint-analysis PoC with fixpoint
+  propagation (`request-to-sql`, `input-to-subprocess` — dataflow, not
+  shape), `mizan scan-remote` (Tarball API + five strict extraction
+  filters), `mizan report` (triage-gated local disclosure drafts, three
+  secret-safety layers, no publish command), and a golden rule-accuracy
+  suite (`tests/rules/`) that measured every rule before changing any:
+  93→100 recall, the duplicate-finding bug it caught in the field, and
+  a 10-repo hand-classified run (`tests/rules/results/RULE_ACCURACY.md`).
 - **v0.13.0** — Bandit-parity wave 1: nine rules adopted by reimplementation
   (no Bandit code copied; Bandit is Apache-2.0, MIZAN is MIT), five
   rejected as noise, every deviation asserted as a negative test, and a
