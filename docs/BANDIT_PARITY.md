@@ -1,6 +1,6 @@
 # Bandit Parity Tracker — MIZAN
 
-Status: wave 1 shipped · Last reviewed: 2026-11-08 · Released in: MIZAN v0.13.0
+Status: waves 1+2 shipped · Last reviewed: 2026-11-10 · Wave 1 released in MIZAN v0.13.0 · Wave 2 in v0.15.0-dev
 
 > Governing rule (protocol): every row below is a **documented decision**, not
 > a claim. "adopted" rows are implemented in MIZAN's own engine and covered by
@@ -88,6 +88,93 @@ Each deviation below is asserted as a NEGATIVE test in
    `trust_remote_code=True` are detected as keyword arguments of calls;
    dict values like `{"verify": False}` are not.
 
+## Wave 2 — status table (2026-11-10)
+
+Per the update cycle: severity/confidence re-verified per-check from
+bandit.readthedocs.io (and the plugin source for B104) before each
+recorded decision.
+
+| Bandit | MIZAN rule | Severity | Status | Rationale | Updated |
+|---|---|---|---|---|---|
+| B104 (`0.0.0.0` literal) | `hardcoded-bind-all-interfaces` | medium | **adopted** (new) | M/M verified from source — the exact literal `"0.0.0.0"` ONLY; the `"::"` IPv6 extension was measured and REJECTED by the wave-2 FP gate (4 FPs in one IPv6 validator: string-manipulation args, not bind hosts) | 2026-11 |
+| B201 (`run(debug=True)`) | `flask-debug-enabled` | high | **adopted** (new) | H/H verified; receiver-agnostic attribute-call form per Bandit semantics | 2026-11 |
+| B601 (`exec_command`) | `paramiko-exec-command` | medium | **adopted** (new) | M/M verified; `.exec_command(` attribute calls | 2026-11 |
+| B401 (`import telnetlib`) | `telnetlib-import` | high | **adopted** (new) | Bandit blacklist parity (import level, high) | 2026-11 |
+| B402 (`import ftplib`) | `ftplib-import` | high | **adopted** (new) | Bandit blacklist parity; `FTP_TLS` NOT exempted — import-level signal, documented | 2026-11 |
+| B502/B503 (weak SSL/TLS versions) | `ssl-insecure-version` | high | **adopted** (new) | H/H + M/M verified; any qualified `ssl.PROTOCOL_SSLv2/SSLv3/TLSv1/TLSv1_1` reference | 2026-11 |
+| B504 (`wrap_socket` without `ssl_version`) | — | — | **rejected** | Bandit LOW; modern `ssl` defaults are sane — flagging the default idiom is noise | 2026-11 |
+| B615 expansion (HF downloads without pinned `revision`) | `hf-unpinned-download` | medium | **adopted** (new — gate-promoted) | M/H verified; the wave-1 deferred candidate adopted THROUGH the measured FP gate (see field measurement below) | 2026-11 |
+| B102/B307 (`exec`/`eval`) | `dynamic-execution` | high | **adopted** (pre-existing) | bare-call boundary (v0.12.3 measured) | 2026-11 |
+| B605 (`os.system`/`os.popen`) | `process-execution` | medium | **adopted** (pre-existing) | qualified-os boundary (v0.9.0 measured) | 2026-11 |
+| B602 (`shell=True`) | `shell-true` | high | **adopted** (pre-existing) | subprocess-rooted launchers (golden-set wave) | 2026-11 |
+| B105/B106/B107 (hardcoded passwords) | — | — | **rejected** | name-only literals are structural noise — MIZAN's `hardcoded-secret-candidate` was deliberately narrowed in the v0.14.0 measured campaign (`password = 'hardcoded'` no longer fires; prefix/entropy signals do) | 2026-11 |
+| B603/B606 (subprocess without shell) | — | — | **rejected** | every subprocess call is not a finding; receiver-blind noise | 2026-11 |
+| B604 (`shell=True` on any function) | — | — | **rejected** | `obj.run(shell=True)` on arbitrary objects is not a shell — MIZAN's `shell-true` is subprocess-rooted (documented deviation, negative-tested) | 2026-11 |
+| B609 (linux wildcard) | — | — | **rejected** | same noise family as B607 (wave-1 rejection) | 2026-11 |
+| B313–B320 (XML/XXE family) | — | — | **deferred** | fires on ALL XML parsing regardless of input trust — needs the v0.15 taint engine for precision; revisit when taint covers file paths | 2026-11 |
+| B505 (weak key sizes) | — | — | **deferred** | needs constant key-size tracking (scope work) | 2026-11 |
+| B508/B509 (SNMP) | — | — | **deferred** | niche protocol surface; revisit if field demand measured | 2026-11 |
+| B610/B611 (Django ORM raw) | — | — | **deferred** | receiver-based `.extra(`/`.raw(` — needs receiver-type tracking; wave-3 candidate with taint | 2026-11 |
+| B612 (logging listen) | — | — | **deferred** | niche; low field presence | 2026-11 |
+| B613 (trojansource) | — | — | **deferred** | zero-noise candidate but text-level (not AST) — needs its own scan integration + severity verification; wave-3 candidate | 2026-11 |
+| B702 (Mako) / B704 (Markup XSS) | — | — | **deferred** | template XSS needs taint for precision (B704 same family as adopted B703 `django-mark-safe`) | 2026-11 |
+
+"new" = implemented in wave 2 · "pre-existing" = verified equivalent rule
+already in MIZAN (measured in `src/mizan/analyzer.py`).
+
+## Wave 2 — documented deviations (negative-tested)
+
+1. **B104 exact literal**: `"0.0.0.0"` only — verified against the Bandit
+   plugin source (`context.string_val == "0.0.0.0"`). The `"::"` extension
+   was implemented, measured (4 FPs in `TheAlgorithms__Python` IPv6
+   validator: `split("::", 1)`, `startswith("::")` args), and removed.
+2. **B201/B601 call form**: attribute calls only — bare `run(debug=True)`
+   / `exec_command(...)` Name-calls are quiet (documented deviation).
+3. **B502/B503 qualified refs only**: `ssl.PROTOCOL_SSLv3` fires;
+   from-imported bare `PROTOCOL_SSLv3` does not (B113 deviation family:
+   import tracking out of scope); module aliasing unresolved.
+4. **B402 no FTP_TLS carve-out**: `import ftplib` fires regardless —
+   Bandit's blacklist signal is import-level; TLS-secured usage is a
+   review outcome, not a static proof.
+5. **B615 pinned semantics**: `revision=` present as a non-constant is
+   treated as pinned (cannot statically prove mutable); the mutable refs
+   `None`/`"main"` and a MISSING revision fire; bare Name-call form fires
+   for function-style entry points (`load_dataset`, `hf_hub_download`,
+   `snapshot_download` — the measured dominant idiom) while bare
+   `from_pretrained(...)` stays quiet (method call in real usage).
+6. **B615 measured carve-outs** (wave-2 FP gate): `sns`/`seaborn`
+   receivers are out of scope (seaborn's `load_dataset` is a local CSV
+   loader — 2 measured FPs); a constant offline-builder name as the first
+   argument (`"json"`, `"csv"`, `"text"`, `"parquet"`) is quiet (2
+   measured sites, both local `data_files=` calls).
+
+## Wave 2 — field measurement (2026-11-10)
+
+Same protocol as wave 1: read-only scans, every hit hand-checked against
+its source line. Sample: 23 `fp_gate_repos` local copies + `tawteen` +
+MIZAN self-scan = **25 targets / 3,997 files**.
+
+- **Round 1 (71 raw hits)** — hand-check found 6 false positives and 2
+  refined cases: 4× `"::"` in an IPv6 validator (B104 extension), 2×
+  `sns.load_dataset` (B615), 2× offline `load_dataset("json",
+  data_files=...)`. **Semantics were corrected BEFORE adoption** — each
+  case became a negative test.
+- **Round 2 (final gate run: 62 hits, 0 false positives)**: 58 real
+  unpinned HF Hub downloads (56 `hiyouga__LlamaFactory` scripts incl.
+  `AutoConfig.from_pretrained(...)`, `trust_remote_code=True` sites; 2
+  `Alishahryar1__free-claude-code` model loads) + 3 real server bind-all
+  defaults (`os.getenv("API_HOST", "0.0.0.0")`, `Field(default="0.0.0.0")`)
+  + 1 self-scan hit (the rule's own `BIND_ALL_INTERFACES` literal in
+  `analyzer.py` — classified context-dependent like wave 1's `/tmp`
+  self-hits, severity medium, non-blocking).
+- No `flask-debug`/`telnetlib`/`ftplib`/`ssl-insecure-version`/
+  `paramiko-exec-command` hits appeared in the sample — their positive
+  coverage is the acceptance suite, and their FP status on the sample is
+  measured-zero by absence.
+
+Gate artifacts: `fp_gate_wave2_v0150dev/gate_rows.json` (workspace).
+Test suite at time of writing: **596 tests green** (same CI command).
+
 ## Suppression policy — `# nosec` is not honored (fail-loud)
 
 Measured 2026-11-08: no `nosec` handling exists anywhere under
@@ -166,14 +253,18 @@ losing sovereignty over MIZAN's own rule set.
 - Detection is per-file, per-syntax-tree: no cross-module import
   resolution, no taint analysis, no dynamic testing. A structural match is
   a lead for review, not proof of exploitability.
-- Bandit per-check Severity/Confidence values were not re-verified this
-  wave (see Provenance & license).
+- Bandit per-check Severity/Confidence values were **re-verified in wave
+  2** (2026-11-10) from the per-check pages / plugin source before each
+  decision; the wave-1 severities were not re-verified that wave (see
+  Provenance & license).
 - **Measured drift alert (2026-11-08, see `COMPARISON.md`): Bandit 1.9.4
   expanded B615** — it now fires on HF downloads without a pinned
   `revision=` (`snapshot_download`/`from_pretrained`/`load_dataset`), which
   is a different signal from the `trust_remote_code=True` check MIZAN
   adopted. 9 such sites were measured in the field run. Candidate rule
-  `hf-unpinned-download` is deferred pending the 20-repo FP gate; this is
-  exactly why every parity session re-verifies per-check semantics.
+  `hf-unpinned-download` was deferred pending the repo-sample FP gate —
+  **resolved in wave 2 (2026-11-10): adopted through the measured gate**,
+  see the Wave 2 table and field measurement. This is exactly why every
+  parity session re-verifies per-check semantics.
 - This document records what was measured and decided; it does not certify
   MIZAN as equivalent to Bandit in coverage.

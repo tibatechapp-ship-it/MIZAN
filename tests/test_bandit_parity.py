@@ -49,11 +49,21 @@ WAVE1_RULES = frozenset({
     "ssl-unverified-context",          # B323-equiv
     "request-without-timeout",         # B113-equiv
     "torch-unsafe-load",               # B614-equiv
-    "hf-trust-remote-code",            # B615-equiv
+    "hf-trust-remote-code",            # B615-equiv (trust_remote_code)
     "jinja2-autoescape-false",         # B701-equiv
     "django-mark-safe",                # B703-equiv
     "tarfile-extractall",              # B202-equiv
     "hardcoded-tmp-path",              # B108-equiv
+})
+
+WAVE2_RULES = frozenset({
+    "hardcoded-bind-all-interfaces",   # B104-equiv
+    "flask-debug-enabled",             # B201-equiv
+    "paramiko-exec-command",           # B601-equiv
+    "telnetlib-import",                # B401-equiv
+    "ftplib-import",                   # B402-equiv
+    "ssl-insecure-version",            # B502+B503-equiv
+    "hf-unpinned-download",            # B615 expansion
 })
 
 
@@ -116,6 +126,59 @@ POSITIVES = [
      "import subprocess\n"
      "subprocess.run(['ls', '/tmp/app-cache'])\n",
      "hardcoded-tmp-path"),
+    # -- wave 2 -------------------------------------------------------
+    ("b104-bind-arg",
+     "import socket\n"
+     "sock.bind(('0.0.0.0', 8080))\n",
+     "hardcoded-bind-all-interfaces"),
+    ("b104-bind-assign",
+     "HOST = '0.0.0.0'\n",
+     "hardcoded-bind-all-interfaces"),
+    ("b104-bind-kwarg",
+     "uvicorn.run(app, host='0.0.0.0', port=8080)\n",
+     "hardcoded-bind-all-interfaces"),
+    ("b104-bind-getenv-default",
+     "import os\n"
+     "host = os.getenv('HOST', '0.0.0.0')\n",
+     "hardcoded-bind-all-interfaces"),
+    ("b201-flask-debug",
+     "app.run(debug=True)\n",
+     "flask-debug-enabled"),
+    ("b601-paramiko-exec",
+     "client.exec_command('ls -la')\n",
+     "paramiko-exec-command"),
+    ("b401-telnetlib",
+     "import telnetlib\n"
+     "tn = telnetlib.Telnet('legacy.host')\n",
+     "telnetlib-import"),
+    ("b402-ftplib",
+     "from ftplib import FTP\n"
+     "f = FTP('host')\n",
+     "ftplib-import"),
+    ("b502-ssl-wrap-bad-version",
+     "import ssl\n"
+     "sock = ssl.wrap_socket(s, ssl_version=ssl.PROTOCOL_SSLv3)\n",
+     "ssl-insecure-version"),
+    ("b503-ssl-context-bad-default",
+     "import ssl\n"
+     "ctx = ssl.SSLContext(ssl.PROTOCOL_TLSv1_1)\n",
+     "ssl-insecure-version"),
+    ("b615-hf-unpinned-method",
+     "from transformers import AutoModel\n"
+     "m = AutoModel.from_pretrained('org/name')\n",
+     "hf-unpinned-download"),
+    ("b615-hf-unpinned-bare",
+     "from datasets import load_dataset\n"
+     "ds = load_dataset('squad')\n",
+     "hf-unpinned-download"),
+    ("b615-hf-revision-main",
+     "from datasets import load_dataset\n"
+     "ds = load_dataset('squad', revision='main')\n",
+     "hf-unpinned-download"),
+    ("b615-hf-revision-none",
+     "from datasets import load_dataset\n"
+     "ds = load_dataset('squad', revision=None)\n",
+     "hf-unpinned-download"),
 ]
 
 # A-2 negatives: (case, code, expected rule that must NOT fire)
@@ -174,6 +237,75 @@ NEGATIVES = [
     ("b501-dict-value-not-call-kwarg",
      "config = {'verify': False}\n",
      {"tls-verification-disabled"}),
+    # -- wave 2 -------------------------------------------------------
+    ("b104-loopback-quiet",
+     "import socket\n"
+     "sock.bind(('127.0.0.1', 8080))\n",
+     {"hardcoded-bind-all-interfaces"}),
+    ("b104-similar-strings-quiet",
+     "PROXY = '0.0.0.1'\n"
+     "ADDR = '::1'\n",
+     {"hardcoded-bind-all-interfaces"}),
+    ("b104-ipv6-fragments-quiet",
+     "addr = address.split('::', 1)\n"
+     "plain = address.startswith('::')\n",
+     {"hardcoded-bind-all-interfaces"}),
+    ("b104-ipv6-only-quiet",
+     "ADDR = '::'\n",
+     {"hardcoded-bind-all-interfaces"}),
+    ("b201-debug-false-quiet",
+     "app.run(debug=False)\n",
+     {"flask-debug-enabled"}),
+    ("b201-no-debug-quiet",
+     "app.run(port=8080)\n",
+     {"flask-debug-enabled"}),
+    ("b201-bare-run-not-attribute",
+     "run(debug=True)\n",
+     {"flask-debug-enabled"}),
+    ("b601-other-method-quiet",
+     "client.exec_api('ls')\n",
+     {"paramiko-exec-command"}),
+    ("b601-bare-quiet",
+     "exec_command('ls')\n",
+     {"paramiko-exec-command"}),
+    ("b401-telnetlib3-quiet",
+     "import telnetlib3\n",
+     {"telnetlib-import"}),
+    ("b402-unrelated-imports-quiet",
+     "import paramiko\n"
+     "import ftplibish\n",
+     {"ftplib-import", "telnetlib-import"}),
+    ("b502-modern-tls-quiet",
+     "import ssl\n"
+     "ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)\n",
+     {"ssl-insecure-version"}),
+    ("b502-default-context-quiet",
+     "import ssl\n"
+     "ctx = ssl.create_default_context()\n",
+     {"ssl-insecure-version", "ssl-unverified-context"}),
+    ("b502-from-import-bare-quiet",
+     "from ssl import PROTOCOL_SSLv3\n"
+     "v = PROTOCOL_SSLv3\n",
+     {"ssl-insecure-version"}),
+    ("b615-pinned-commit-quiet",
+     "from transformers import AutoModel\n"
+     "m = AutoModel.from_pretrained('org/name', revision='e7a1b2c3')\n",
+     {"hf-unpinned-download"}),
+    ("b615-dynamic-revision-quiet",
+     "from datasets import load_dataset\n"
+     "ds = load_dataset('squad', revision=cfg['rev'])\n",
+     {"hf-unpinned-download"}),
+    ("b615-bare-from-pretrained-quiet",
+     "from_pretrained('m')\n",
+     {"hf-unpinned-download"}),
+    ("b615-seaborn-local-loader-quiet",
+     "import seaborn as sns\n"
+     "mpg = sns.load_dataset('mpg')\n",
+     {"hf-unpinned-download"}),
+    ("b615-offline-builder-quiet",
+     "from datasets import load_dataset\n"
+     "ds = load_dataset('json', data_files='rows.jsonl')\n",
+     {"hf-unpinned-download"}),
 ]
 
 
@@ -197,6 +329,13 @@ class TestBanditParityPositives(unittest.TestCase):
             "django-mark-safe": "medium",
             "tarfile-extractall": "high",
             "hardcoded-tmp-path": "low",
+            "hardcoded-bind-all-interfaces": "medium",
+            "flask-debug-enabled": "high",
+            "paramiko-exec-command": "medium",
+            "telnetlib-import": "high",
+            "ftplib-import": "high",
+            "ssl-insecure-version": "high",
+            "hf-unpinned-download": "medium",
         }
         severities = {f["rule"]: f["severity"] for f in analyze_code(
             "\n".join(code for _, code, _ in POSITIVES))}
@@ -224,6 +363,11 @@ class TestBanditParityRegistry(unittest.TestCase):
         registered = {r for p in list_plugins() for r in p["rules"]}
         missing = WAVE1_RULES - registered
         self.assertFalse(missing, f"unregistered wave-1 rules: {sorted(missing)}")
+
+    def test_wave2_rules_registered(self):
+        registered = {r for p in list_plugins() for r in p["rules"]}
+        missing = WAVE2_RULES - registered
+        self.assertFalse(missing, f"unregistered wave-2 rules: {sorted(missing)}")
 
 
 class TestBanditParityEndToEnd(unittest.TestCase):
@@ -279,6 +423,41 @@ class TestBanditParityEndToEnd(unittest.TestCase):
         overlap = fired & WAVE1_RULES
         self.assertFalse(overlap,
                          f"CLI report fired wave-1 rules on clean code: "
+                         f"{sorted(overlap)}")
+
+    WAVE2_POSITIVE_FILE = (
+        "import socket\n"
+        "import ssl\n"
+        "import telnetlib\n"
+        "\n"
+        "sock = socket.socket()\n"
+        "sock.bind(('0.0.0.0', 8080))\n"
+        "ctx = ssl.SSLContext(ssl.PROTOCOL_SSLv3)\n"
+        "tn = telnetlib.Telnet('legacy.host')\n"
+    )
+
+    WAVE2_NEGATIVE_FILE = (
+        "import socket\n"
+        "import ssl\n"
+        "\n"
+        "sock = socket.socket()\n"
+        "sock.bind(('127.0.0.1', 8080))\n"
+        "ctx = ssl.create_default_context()\n"
+    )
+
+    def test_wave2_end_to_end_positives_reach_the_report(self):
+        result = self.run_cli_scan({"sample_wave2_pos.py": self.WAVE2_POSITIVE_FILE})
+        fired = {f["rule"] for f in result.get("findings", [])}
+        for rule in ("hardcoded-bind-all-interfaces", "ssl-insecure-version",
+                     "telnetlib-import"):
+            self.assertIn(rule, fired, f"CLI report missed {rule}")
+
+    def test_wave2_end_to_end_negatives_stay_silent(self):
+        result = self.run_cli_scan({"sample_wave2_neg.py": self.WAVE2_NEGATIVE_FILE})
+        fired = {f["rule"] for f in result.get("findings", [])}
+        overlap = fired & WAVE2_RULES
+        self.assertFalse(overlap,
+                         f"CLI report fired wave-2 rules on clean code: "
                          f"{sorted(overlap)}")
 
 

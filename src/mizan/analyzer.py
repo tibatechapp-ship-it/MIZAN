@@ -32,6 +32,24 @@ v0.13.0 — Bandit-parity wave 1 (docs/BANDIT_PARITY.md):
   rejected as structural noise; every deviation from Bandit recall is
   documented in docs/BANDIT_PARITY.md.
 
+v0.15.0-dev — Bandit-parity wave 2 (docs/BANDIT_PARITY.md):
+  Severity/confidence re-verified per-check from bandit.readthedocs.io
+  before each decision. Adopted: hardcoded-bind-all-interfaces (B104,
+  M/M), flask-debug-enabled (B201, H/H), paramiko-exec-command (B601,
+  M/M), telnetlib-import (B401, high), ftplib-import (B402, high),
+  ssl-insecure-version (B502 H/H + B503 M/M; the B504 no-version LOW
+  case is rejected as modern-defaults noise), and hf-unpinned-download
+  (B615 expansion — the wave-1 deferred candidate, adopted through the
+  measured FP gate: 25 targets / 3,997 files, 71 raw hits hand-checked,
+  6 false positives + 2 offline-builder calls found and the semantics
+  corrected BEFORE adoption; final gate run: 62 hits, 0 false
+  positives). Pre-existing parity
+  recorded: B102/B307→dynamic-execution, B605→process-execution,
+  B602→shell-true. Rejected: B105/B106/B107 (v0.14.0 narrowing),
+  B603/B604/B606 (receiver-blind noise), B609 (B607 noise family).
+  Deferred: B313-B320 XML/XXE and B704 Markup (need taint for
+  precision), B505, B508/B509, B610/B611, B612, B613.
+
 v0.14.0-dev — taint-analysis proof of concept (docs/ROADMAP.md P1.2):
   Module ``taint.py`` propagates two measured source families (input():
   ``input()``/``sys.argv``; request: ``request.<data-attr>`` chains) to
@@ -154,6 +172,61 @@ HTTP_VERB_METHODS = frozenset({
 # v0.13.0: PEP 706 tarfile extraction filters that neutralize path
 # traversal / symlink attacks (B202-equiv mitigation).
 TARFILE_SAFE_FILTERS = frozenset({"data", "tar"})
+
+# v0.15.0-dev Bandit-parity wave 2 (docs/BANDIT_PARITY.md).
+
+# B104-equiv: bind-all interface literals — value positions only, same
+# position discipline as B108 (call arguments, assignment values, one
+# nesting level into list/tuple/set literals). Verified from the Bandit
+# source: the exact literal "0.0.0.0" ONLY. The "::" IPv6 extension was
+# measured and REJECTED by the wave-2 FP gate (4 false positives in one
+# IPv6-validator file — string-manipulation arguments, not bind hosts).
+BIND_ALL_INTERFACES = frozenset({"0.0.0.0"})
+
+# B502/B503-equiv: weak SSL/TLS protocol versions. Qualified `ssl.*`
+# references only (from-imported bare names are out of scope — same
+# deviation family as B113; aliasing is not resolved).
+WEAK_SSL_PROTOCOLS = frozenset({
+    "PROTOCOL_SSLv2", "PROTOCOL_SSLv3",
+    "PROTOCOL_TLSv1", "PROTOCOL_TLSv1_1",
+})
+
+# B401/B402-equiv: stdlib plaintext-protocol modules, flagged at the
+# import level (severity parity with Bandit's blacklist entries).
+INSECURE_PROTOCOL_IMPORTS = {
+    "telnetlib": "telnetlib-import",
+    "ftplib": "ftplib-import",
+}
+
+# B615 expansion (the wave-1 deferred candidate, measured into adoption
+# by the 24-repo FP gate): Hugging Face Hub entry points that download
+# code/weights and must pin an immutable revision.
+HF_DOWNLOAD_METHODS = frozenset({
+    "from_pretrained", "load_dataset", "hf_hub_download",
+    "snapshot_download",
+})
+# B615: function-style entry points are normally called BARE
+# (`from datasets import load_dataset; load_dataset(...)`), so the bare
+# Name-call form fires for them too. `from_pretrained` is a method call
+# in real usage (AutoModel.from_pretrained) — the bare form does not
+# fire (documented deviation).
+HF_FUNCTION_STYLE = frozenset({
+    "load_dataset", "hf_hub_download", "snapshot_download",
+})
+# B615: refs that do NOT pin a revision. A non-constant revision (e.g. a
+# variable read from config) is treated as pinned — it cannot be proven
+# mutable statically (documented deviation).
+UNPINNED_REVISIONS = frozenset({None, "main"})
+
+# B615: measured wave-2 precision carve-outs (24-repo FP gate):
+# - seaborn's sns.load_dataset / seaborn.load_dataset is a local CSV
+#   loader, not a Hub download (2 measured false positives) — receivers
+#   rooted at these names are out of scope.
+# - load_dataset("json"|"csv"|"text"|"parquet", data_files=...) is the
+#   OFFLINE builder idiom (measured: 2 sites, both local) — a constant
+#   builder name as the first argument does not reach the Hub.
+HF_NON_HUB_RECEIVERS = frozenset({"sns", "seaborn"})
+LOCAL_DATASET_BUILDERS = frozenset({"json", "csv", "text", "parquet"})
 
 
 def _is_placeholder(value: str) -> bool:
@@ -662,16 +735,128 @@ class PythonSecurityVisitor(ast.NodeVisitor):
         for kw in node.keywords:
             self._check_tmp_value(node, kw.value)
 
+        # -- v0.15.0-dev Bandit-parity wave 2 (docs/BANDIT_PARITY.md) ----
+
+        # hardcoded-bind-all-interfaces (B104-equiv): bind-all literals in
+        # the same value positions as B108 — call arguments (list/tuple
+        # elements included) and assignment values.
+        for arg in node.args:
+            self._check_bind_all_value(node, arg)
+        for kw in node.keywords:
+            self._check_bind_all_value(node, kw.value)
+
+        # flask-debug-enabled (B201-equiv, HIGH/HIGH verified): .run(
+        # debug=True) exposes the Werkzeug debugger — arbitrary code
+        # execution. Bandit semantics kept receiver-agnostic: a debug=
+        # True run call is the debugger flag regardless of framework.
+        debug_kw = self._kwarg(node, "debug")
+        if (name == "run"
+                and isinstance(node.func, ast.Attribute)
+                and isinstance(debug_kw, ast.Constant)
+                and debug_kw.value is True):
+            self.add(
+                node, "flask-debug-enabled", "high",
+                "run(debug=True) exposes the interactive debugger — "
+                "arbitrary code execution in production."
+            )
+
+        # paramiko-exec-command (B601-equiv, MEDIUM/MEDIUM verified):
+        # exec_command runs a remote shell command over SSH.
+        if name == "exec_command" and isinstance(node.func, ast.Attribute):
+            self.add(
+                node, "paramiko-exec-command", "medium",
+                "SSH exec_command runs a remote shell command — validate "
+                "the command source."
+            )
+
+        # hf-unpinned-download (B615 expansion, MEDIUM/HIGH verified):
+        # Hugging Face Hub downloads without an immutable revision pin —
+        # missing, None, or the mutable "main" ref. A non-constant
+        # revision is treated as pinned (documented deviation).
+        if name in HF_DOWNLOAD_METHODS and (
+                isinstance(node.func, ast.Attribute)
+                or (name in HF_FUNCTION_STYLE
+                    and isinstance(node.func, ast.Name))):
+            # Measured precision carve-outs (wave-2 FP gate). NOTE: no
+            # early return — visit_Call must always reach generic_visit.
+            carve_out = (
+                (isinstance(node.func, ast.Attribute)
+                 and self._root_name(node.func.value)
+                 in HF_NON_HUB_RECEIVERS)          # seaborn local loader
+                or (node.args
+                    and isinstance(node.args[0], ast.Constant)
+                    and isinstance(node.args[0].value, str)
+                    and node.args[0].value in LOCAL_DATASET_BUILDERS)
+            )                                      # offline builder idiom
+            if not carve_out:
+                rev = self._kwarg(node, "revision")
+                unpinned = rev is None or (
+                    isinstance(rev, ast.Constant)
+                    and rev.value in UNPINNED_REVISIONS)
+                if unpinned:
+                    self.add(
+                        node, "hf-unpinned-download", "medium",
+                        "Hugging Face download without a pinned revision — "
+                        "artifacts can change under you (pin a commit "
+                        "hash)."
+                    )
+
+        self.generic_visit(node)
+
+    def visit_Attribute(self, node):
+        # ssl-insecure-version (B502/B503-equiv, HIGH/HIGH + MEDIUM/
+        # MEDIUM verified): any qualified reference to a weak SSL/TLS
+        # protocol constant — attribute position or ssl_version= kwarg
+        # alike. B504 (no ssl_version at all) is deliberately NOT
+        # flagged: Bandit rates it LOW and modern ssl defaults are sane
+        # (documented rejection — noise).
+        if (node.attr in WEAK_SSL_PROTOCOLS
+                and isinstance(node.value, ast.Name)
+                and node.value.id == "ssl"):
+            self.add(
+                node, "ssl-insecure-version", "high",
+                "Weak SSL/TLS protocol version — downgrade and "
+                "decryption exposure (use modern defaults)."
+            )
+        self.generic_visit(node)
+
+    def visit_Import(self, node):
+        # telnetlib-import (B401-equiv) / ftplib-import (B402-equiv):
+        # plaintext-protocol stdlib modules, import level (Bandit
+        # blacklist semantics: severity high).
+        for alias in node.names:
+            rule = INSECURE_PROTOCOL_IMPORTS.get(
+                alias.name.split(".")[0])
+            if rule:
+                self.add(
+                    node, rule, "high",
+                    "Plaintext-protocol module (%s) — credentials and "
+                    "data cross the wire unencrypted." % alias.name
+                )
+        self.generic_visit(node)
+
+    def visit_ImportFrom(self, node):
+        rule = INSECURE_PROTOCOL_IMPORTS.get(
+            (node.module or "").split(".")[0]) if node.module else None
+        if rule:
+            self.add(
+                node, rule, "high",
+                "Plaintext-protocol module (%s) — credentials and data "
+                "cross the wire unencrypted." % node.module
+            )
         self.generic_visit(node)
 
     def visit_Assign(self, node):
         # hardcoded-tmp-path (B108-equiv): assignment value positions.
         self._check_tmp_value(node, node.value)
+        # hardcoded-bind-all-interfaces (B104-equiv): same positions.
+        self._check_bind_all_value(node, node.value)
         self.generic_visit(node)
 
     def visit_AnnAssign(self, node):
         if node.value is not None:
             self._check_tmp_value(node, node.value)
+            self._check_bind_all_value(node, node.value)
         self.generic_visit(node)
 
     def _check_tmp_value(self, node, value):
@@ -691,6 +876,23 @@ class PythonSecurityVisitor(ast.NodeVisitor):
             for elt in value.elts:
                 if isinstance(elt, ast.Constant):
                     self._check_tmp_value(node, elt.value)
+
+    def _check_bind_all_value(self, node, value):
+        """Flag bind-all interface literals ("0.0.0.0", "::") in value
+        positions, one nesting level into list/tuple/set literals — the
+        B104 value-position discipline mirroring _check_tmp_value."""
+        if isinstance(value, ast.Constant):  # accept node or raw value
+            value = value.value
+        if isinstance(value, str) and value in BIND_ALL_INTERFACES:
+            self.add(
+                node, "hardcoded-bind-all-interfaces", "medium",
+                "Binding to all interfaces (0.0.0.0/::) exposes the "
+                "service on every network interface — bind explicitly."
+            )
+        elif isinstance(value, (ast.Tuple, ast.List, ast.Set)):
+            for elt in value.elts:
+                if isinstance(elt, ast.Constant):
+                    self._check_bind_all_value(node, elt.value)
 
 
 def _collect_placeholder_vars(tree):
