@@ -81,7 +81,7 @@ not aspirational marketing.
 | Sampled findings verified true positives | **20/20**, zero security FPs | v0.12.0 field notes |
 | MIZAN scanning its own repository | **0 actionable findings** across all scanners | v0.12.1+, strict `--gate` |
 | Field benchmark — 100 real open-source repos (zai-org first, Nov 2026) | **median 1.04 s / repo**, 0 crashes, 0 timeouts | v0.12.2 field wave |
-| Test suite | **410 tests green**, Python 3.10–3.14 | CI, every push |
+| Test suite | **593 tests green**, Python 3.10–3.14 | CI, every push |
 | Trusted CI steps that can hide a failure | **0** (`continue-on-error` removed) | v0.12.1 |
 
 ## Quickstart
@@ -154,7 +154,7 @@ Drop MIZAN into any workflow — SARIF lands in GitHub code scanning
 automatically:
 
 ```yaml
-- uses: tibatechapp-ship-it/MIZAN/action@main
+- uses: tibatechapp-ship-it/MIZAN/action@v0.14.0
   with:
     fail-on-findings: 'true'
     sarif-output: mizan-results.sarif
@@ -199,7 +199,7 @@ GitHub's name rules, the dynamic IN-clause placeholder idiom no longer
 fires sql-injection, and test-fixture secrets/dynamic-exec findings (89% /
 70% of those rules' field populations) downgrade to `low` — nothing is
 dropped. Golden rule-accuracy suite: 20 security rules × (5 positive + 5
-negative) + 16 edge cases — 100/100 + 100/100; 471 tests green. Read-only,
+negative) + 16 edge cases — 100/100 + 100/100; 471 tests green at the v0.14.0 tag. Read-only,
 offline, as always.
 
 **Suppression policy (please read before CI integration): MIZAN does not
