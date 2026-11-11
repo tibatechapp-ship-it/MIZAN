@@ -66,6 +66,11 @@ WAVE2_RULES = frozenset({
     "hf-unpinned-download",            # B615 expansion
 })
 
+WAVE3_RULES = frozenset({
+    "weak-crypto-key-size",            # B505-equiv
+    "bidi-override-chars",             # B613-equiv (Trojan Source)
+})
+
 
 def analyze_code(code: str, filename: str = "sample_case.py"):
     """Run the real analyzer on `code` inside a temp repo; return findings."""
@@ -179,6 +184,60 @@ POSITIVES = [
      "from datasets import load_dataset\n"
      "ds = load_dataset('squad', revision=None)\n",
      "hf-unpinned-download"),
+    # -- wave 3 -------------------------------------------------------
+    ("b505-pycrypto-rsa-alias-high",
+     "from Crypto.PublicKey import RSA\n"
+     "key = RSA.generate(512)\n",
+     "weak-crypto-key-size"),
+    ("b505-pycrypto-dsa-kwarg-high",
+     "from Crypto.PublicKey import DSA\n"
+     "key = DSA.generate(bits=512)\n",
+     "weak-crypto-key-size"),
+    ("b505-pycryptodome-rsa-high",
+     "from Cryptodome.PublicKey import RSA\n"
+     "key = RSA.generate(768)\n",
+     "weak-crypto-key-size"),
+    ("b505-pycrypto-qualified-chain",
+     "key = Crypto.PublicKey.RSA.generate(512)\n",
+     "weak-crypto-key-size"),
+    ("b505-crypto-rsa-keyword-medium",
+     "from cryptography.hazmat.primitives.asymmetric import rsa\n"
+     "key = rsa.generate_private_key(public_exponent=65537, key_size=1024)\n",
+     "weak-crypto-key-size"),
+    ("b505-crypto-rsa-positional-high",
+     "from cryptography.hazmat.primitives.asymmetric import rsa\n"
+     "key = rsa.generate_private_key(65537, 512)\n",
+     "weak-crypto-key-size"),
+    ("b505-crypto-dsa-alias-high",
+     "from cryptography.hazmat.primitives.asymmetric import dsa\n"
+     "key = dsa.generate_private_key(512)\n",
+     "weak-crypto-key-size"),
+    ("b505-crypto-ec-secp192-medium",
+     "from cryptography.hazmat.primitives.asymmetric import ec\n"
+     "key = ec.generate_private_key(ec.SECP192R1())\n",
+     "weak-crypto-key-size"),
+    ("b505-crypto-ec-bare-curve-medium",
+     "from cryptography.hazmat.primitives.asymmetric import ec\n"
+     "from cryptography.hazmat.primitives.asymmetric.ec import SECT163K1\n"
+     "key = ec.generate_private_key(SECT163K1())\n",
+     "weak-crypto-key-size"),
+    ("b505-crypto-full-qualified-chain",
+     "import cryptography.hazmat.primitives.asymmetric.rsa\n"
+     "key = cryptography.hazmat.primitives.asymmetric.rsa"
+     ".generate_private_key(65537, 512)\n",
+     "weak-crypto-key-size"),
+    ("b613-bidi-override-in-string",
+     "label = 'report\u202e.txt'\n",
+     "bidi-override-chars"),
+    ("b613-bidi-embeddings-in-string",
+     "label = 'a\u202bb'\n",
+     "bidi-override-chars"),
+    ("b613-bidi-isolate-in-comment",
+     "access = 'none'  # \u2066check if admin\u2069\n",
+     "bidi-override-chars"),
+    ("b613-rtl-mark-in-string",
+     "title = 'الفصل\u200fالأول'\n",
+     "bidi-override-chars"),
 ]
 
 # A-2 negatives: (case, code, expected rule that must NOT fire)
@@ -306,6 +365,71 @@ NEGATIVES = [
      "from datasets import load_dataset\n"
      "ds = load_dataset('json', data_files='rows.jsonl')\n",
      {"hf-unpinned-download"}),
+    # -- wave 3 -------------------------------------------------------
+    ("b505-rsa-2048-quiet",
+     "from Crypto.PublicKey import RSA\n"
+     "key = RSA.generate(2048)\n",
+     {"weak-crypto-key-size"}),
+    ("b505-rsa-3072-quiet",
+     "from Crypto.PublicKey import RSA\n"
+     "key = RSA.generate(3072)\n",
+     {"weak-crypto-key-size"}),
+    ("b505-crypto-rsa-4096-quiet",
+     "from cryptography.hazmat.primitives.asymmetric import rsa\n"
+     "key = rsa.generate_private_key(public_exponent=65537, key_size=4096)\n",
+     {"weak-crypto-key-size"}),
+    ("b505-crypto-rsa-modern-defaults-quiet",
+     "from cryptography.hazmat.primitives.asymmetric import rsa\n"
+     "key = rsa.generate_private_key(65537)\n",
+     {"weak-crypto-key-size"}),
+    ("b505-dynamic-bits-quiet",
+     "from Crypto.PublicKey import RSA\n"
+     "key = RSA.generate(key_bits)\n",
+     {"weak-crypto-key-size"}),
+    ("b505-string-size-quiet",
+     "from cryptography.hazmat.primitives.asymmetric import rsa\n"
+     "key = rsa.generate_private_key(65537, '2048')\n",
+     {"weak-crypto-key-size"}),
+    ("b505-bool-bits-quiet",
+     "from Crypto.PublicKey import RSA\n"
+     "key = RSA.generate(True)\n",
+     {"weak-crypto-key-size"}),
+    ("b505-missing-size-quiet",
+     "from Crypto.PublicKey import RSA\n"
+     "key = RSA.generate()\n",
+     {"weak-crypto-key-size"}),
+    ("b505-ec-secp256-quiet",
+     "from cryptography.hazmat.primitives.asymmetric import ec\n"
+     "key = ec.generate_private_key(ec.SECP256R1())\n",
+     {"weak-crypto-key-size"}),
+    ("b505-ec-secp224-quiet",
+     "from cryptography.hazmat.primitives.asymmetric import ec\n"
+     "key = ec.generate_private_key(ec.SECP224R1())\n",
+     {"weak-crypto-key-size"}),
+    ("b505-ec-dynamic-curve-quiet",
+     "from cryptography.hazmat.primitives.asymmetric import ec\n"
+     "key = ec.generate_private_key(pick_curve())\n",
+     {"weak-crypto-key-size"}),
+    ("b505-ecc-not-rsa-dsa-quiet",
+     "from Crypto.PublicKey import ECC\n"
+     "key = ECC.generate(512)\n",
+     {"weak-crypto-key-size"}),
+    ("b505-foreign-package-root-quiet",
+     "key = mylib.PublicKey.RSA.generate(512)\n",
+     {"weak-crypto-key-size"}),
+    ("b505-unrelated-generate-quiet",
+     "builder = WidgetFactory()\n"
+     "widget = builder.generate(512)\n",
+     {"weak-crypto-key-size"}),
+    ("b505-generate-private-key-other-receiver-quiet",
+     "key = builder.generate_private_key(512)\n",
+     {"weak-crypto-key-size"}),
+    ("b613-clean-arabic-quiet",
+     "label = 'مرحبا بالعالم'\n",
+     {"bidi-override-chars"}),
+    ("b613-lrm-u200e-not-in-set-quiet",
+     "label = 'left\u200eright'\n",
+     {"bidi-override-chars"}),
 ]
 
 
@@ -368,6 +492,76 @@ class TestBanditParityRegistry(unittest.TestCase):
         registered = {r for p in list_plugins() for r in p["rules"]}
         missing = WAVE2_RULES - registered
         self.assertFalse(missing, f"unregistered wave-2 rules: {sorted(missing)}")
+
+    def test_wave3_rules_registered(self):
+        registered = {r for p in list_plugins() for r in p["rules"]}
+        missing = WAVE3_RULES - registered
+        self.assertFalse(missing, f"unregistered wave-3 rules: {sorted(missing)}")
+
+
+class TestWave3SeverityAndSemantics(unittest.TestCase):
+    """Wave-3 contracts that need per-case precision (B505 severity
+    bands, B613 language coverage) — not foldable into the joined-file
+    severity map without ordering magic."""
+
+    KEY_SIZE_CASES = [
+        # (code, expected severity or None = must stay quiet)
+        ("from Crypto.PublicKey import RSA\n"
+         "key = RSA.generate(512)\n", "high"),
+        ("from Crypto.PublicKey import RSA\n"
+         "key = RSA.generate(1024)\n", "medium"),
+        ("from Crypto.PublicKey import RSA\n"
+         "key = RSA.generate(2048)\n", None),
+        ("from cryptography.hazmat.primitives.asymmetric import rsa\n"
+         "key = rsa.generate_private_key(65537, 512)\n", "high"),
+        ("from cryptography.hazmat.primitives.asymmetric import rsa\n"
+         "key = rsa.generate_private_key(65537, 1024)\n", "medium"),
+        ("from cryptography.hazmat.primitives.asymmetric import rsa\n"
+         "key = rsa.generate_private_key(65537, 2048)\n", None),
+        ("from cryptography.hazmat.primitives.asymmetric import dsa\n"
+         "key = dsa.generate_private_key(512)\n", "high"),
+        ("from cryptography.hazmat.primitives.asymmetric import dsa\n"
+         "key = dsa.generate_private_key(1024)\n", "medium"),
+        ("from cryptography.hazmat.primitives.asymmetric import ec\n"
+         "key = ec.generate_private_key(ec.SECP192R1())\n", "medium"),
+        ("from cryptography.hazmat.primitives.asymmetric import ec\n"
+         "key = ec.generate_private_key(ec.SECT163K1())\n", "medium"),
+        ("from cryptography.hazmat.primitives.asymmetric import ec\n"
+         "key = ec.generate_private_key(ec.SECP224R1())\n", None),
+    ]
+
+    def test_b505_severity_bands_match_verified_thresholds(self):
+        for idx, (code, expected) in enumerate(self.KEY_SIZE_CASES):
+            with self.subTest(case=idx):
+                rules = {f["rule"]: f["severity"]
+                         for f in analyze_code(code)
+                         if f["rule"] == "weak-crypto-key-size"}
+                self.assertEqual(
+                    rules.get("weak-crypto-key-size"), expected,
+                    f"case {idx}: band contract drifted")
+
+    def test_b613_severity_is_high(self):
+        findings = [f for f in analyze_code("s = 'a\u202eb'\n")
+                    if f["rule"] == "bidi-override-chars"]
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0]["severity"], "high")
+
+    def test_b613_covers_non_python_sources(self):
+        # Bandit scans Python files only; MIZAN's per-line loop covers
+        # every scannable language (documented extension).
+        fired = {f["rule"] for f in analyze_code(
+            'var s = "a\u202eb";\n', filename="sample_case.js")}
+        self.assertIn("bidi-override-chars", fired)
+
+    def test_b613_reports_every_affected_line(self):
+        code = ("a = 'x\u202ey'\n"
+                "b = 'clean'\n"
+                "c = 'z\u202ew'\n")
+        lines = sorted(f["line"] for f in analyze_code(code)
+                       if f["rule"] == "bidi-override-chars")
+        self.assertEqual(lines, [1, 3],
+                         "every affected line must be reported (Bandit "
+                         "reports only the first — documented extension)")
 
 
 class TestBanditParityEndToEnd(unittest.TestCase):
@@ -458,6 +652,34 @@ class TestBanditParityEndToEnd(unittest.TestCase):
         overlap = fired & WAVE2_RULES
         self.assertFalse(overlap,
                          f"CLI report fired wave-2 rules on clean code: "
+                         f"{sorted(overlap)}")
+
+    WAVE3_POSITIVE_FILE = (
+        "from Crypto.PublicKey import RSA\n"
+        "\n"
+        "key = RSA.generate(512)\n"
+        "label = 'report\u202e.txt'\n"
+    )
+
+    WAVE3_NEGATIVE_FILE = (
+        "from Crypto.PublicKey import RSA\n"
+        "\n"
+        "key = RSA.generate(4096)\n"
+        "label = 'تقرير عادي بدون محارف اتجاهية'\n"
+    )
+
+    def test_wave3_end_to_end_positives_reach_the_report(self):
+        result = self.run_cli_scan({"sample_wave3_pos.py": self.WAVE3_POSITIVE_FILE})
+        fired = {f["rule"] for f in result.get("findings", [])}
+        for rule in ("weak-crypto-key-size", "bidi-override-chars"):
+            self.assertIn(rule, fired, f"CLI report missed {rule}")
+
+    def test_wave3_end_to_end_negatives_stay_silent(self):
+        result = self.run_cli_scan({"sample_wave3_neg.py": self.WAVE3_NEGATIVE_FILE})
+        fired = {f["rule"] for f in result.get("findings", [])}
+        overlap = fired & WAVE3_RULES
+        self.assertFalse(overlap,
+                         f"CLI report fired wave-3 rules on clean code: "
                          f"{sorted(overlap)}")
 
 

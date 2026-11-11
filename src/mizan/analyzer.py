@@ -48,7 +48,23 @@ v0.15.0-dev — Bandit-parity wave 2 (docs/BANDIT_PARITY.md):
   B602→shell-true. Rejected: B105/B106/B107 (v0.14.0 narrowing),
   B603/B604/B606 (receiver-blind noise), B609 (B607 noise family).
   Deferred: B313-B320 XML/XXE and B704 Markup (need taint for
-  precision), B505, B508/B509, B610/B611, B612, B613.
+  precision), B508/B509, B610/B611, B612.
+
+v0.15.0-dev — Bandit-parity wave 3 (docs/BANDIT_PARITY.md):
+  Adopted through the same measured pipeline (severity/semantics
+  verified verbatim from the per-check pages and plugin sources):
+  weak-crypto-key-size (B505 — RSA/DSA high<1024/medium<2048, EC
+  high<160/medium<224; constant-integer sizes only — dynamic, string
+  and missing sizes stay quiet per the Bandit 2048 default; EC curves
+  resolved through the Bandit curve registry, unknown curves quiet)
+  and bidi-override-chars (B613 — Trojan Source, CVE-2021-42574; the
+  BIDI_CHARACTERS tuple verified verbatim incl. U+200F; text-level
+  check extended from Python-only to every scannable language —
+  documented MIZAN extension). Wave-3 FP gate: 25 targets, 8 hits
+  hand-checked with raw-codepoint dumps — 0 structural false
+  positives, 8 context-dependent (defensive bidi-sanitizer
+  definitions in one field repo); weak-crypto measured-zero by
+  absence. 603 tests green.
 
 v0.14.0-dev — taint-analysis proof of concept (docs/ROADMAP.md P1.2):
   Module ``taint.py`` propagates two measured source families (input():
@@ -218,6 +234,43 @@ HF_FUNCTION_STYLE = frozenset({
 # mutable statically (documented deviation).
 UNPINNED_REVISIONS = frozenset({None, "main"})
 
+# -- v0.15.0-dev Bandit-parity wave 3 (docs/BANDIT_PARITY.md) --------
+
+# B505-equiv: weak key sizes. Thresholds verified verbatim from the
+# Bandit plugin config (weak_cryptographic_key.py gen_config):
+# RSA/DSA high=1024, medium=2048; EC high=160, medium=224. HIGH below
+# the lower threshold, MEDIUM between the two, quiet at/above medium.
+WEAK_KEY_SIZE_THRESHOLDS = {
+    "RSA": (1024, 2048),
+    "DSA": (1024, 2048),
+    "EC": (160, 224),
+}
+
+# B505 pycrypto/pycryptodome form: <Root>.PublicKey.<RSA|DSA>.generate
+# (both package roots, per the Bandit qual table).
+PYCRYPTO_KEY_ROOTS = frozenset({"Crypto", "Cryptodome"})
+
+# B505 EC curve registry (Bandit curve_key_sizes, verbatim). Unknown
+# curves default to 224 bits in Bandit — which classifies quiet — so
+# only mapped curves below 224 can fire (SECP192R1 192, SECT163K1 163,
+# SECT163R2 163 — all MEDIUM by the verified thresholds).
+EC_CURVE_KEY_SIZES = {
+    "SECT571K1": 571, "SECT571R1": 570, "SECP521R1": 521,
+    "BrainpoolP512R1": 512, "SECT409K1": 409, "SECT409R1": 409,
+    "BrainpoolP384R1": 384, "SECP384R1": 384, "SECT283K1": 283,
+    "SECT283R1": 283, "BrainpoolP256R1": 256, "SECP256K1": 256,
+    "SECP256R1": 256, "SECT233K1": 233, "SECT233R1": 233,
+    "SECP224R1": 224, "SECP192R1": 192, "SECT163K1": 163,
+    "SECT163R2": 163,
+}
+
+# B613-equiv: Trojan Source bidi control characters — the Bandit
+# BIDI_CHARACTERS tuple verified verbatim from the plugin source
+# (trojansource.py, versionadded 1.7.10): U+202A-E (embeddings and
+# overrides), U+2066-2069 (isolates) and U+200F (RTL MARK).
+# High/Medium per the per-check page; CWE-838.
+BIDI_CHARS_RE = re.compile("[\u202a-\u202e\u2066-\u2069\u200f]")
+
 # B615: measured wave-2 precision carve-outs (24-repo FP gate):
 # - seaborn's sns.load_dataset / seaborn.load_dataset is a local CSV
 #   loader, not a Hub download (2 measured false positives) — receivers
@@ -362,6 +415,21 @@ class PythonSecurityVisitor(ast.NodeVisitor):
             node = node.value
         if isinstance(node, ast.Name):
             return node.id
+        return None
+
+    @staticmethod
+    def _dotted_name(node):
+        """Full dotted name of a Name/Attribute chain ("a.b.c") — None
+        when any segment is not a plain name (calls, subscripts and
+        other expressions break the chain, deliberately: they cannot be
+        resolved statically and guessing would fabricate receivers)."""
+        parts = []
+        while isinstance(node, ast.Attribute):
+            parts.append(node.attr)
+            node = node.value
+        if isinstance(node, ast.Name):
+            parts.append(node.id)
+            return ".".join(reversed(parts))
         return None
 
     @staticmethod
@@ -801,6 +869,10 @@ class PythonSecurityVisitor(ast.NodeVisitor):
                         "hash)."
                     )
 
+        # weak-crypto-key-size (B505-equiv, wave 3): constant-integer
+        # key sizes below the verified Bandit thresholds.
+        self._check_weak_key_size(node)
+
         self.generic_visit(node)
 
     def visit_Attribute(self, node):
@@ -859,6 +931,102 @@ class PythonSecurityVisitor(ast.NodeVisitor):
             self._check_bind_all_value(node, node.value)
         self.generic_visit(node)
 
+    def _int_const(self, node):
+        """Integer literal value (bool excluded) — None for anything
+        else. A non-constant or string key size cannot be proven weak
+        statically, so it stays quiet (Bandit: string sizes 'can't be
+        processed'; same deviation family as B615's non-constant
+        revision treated as pinned)."""
+        if (isinstance(node, ast.Constant)
+                and isinstance(node.value, int)
+                and not isinstance(node.value, bool)):
+            return node.value
+        return None
+
+    def _curve_size(self, curve):
+        """Map an EC curve argument to its Bandit-registry bit size, or
+        None: unknown/dynamic curves cannot be proven weak and stay
+        quiet (Bandit defaults unmapped curves to 224 bits, which
+        classifies quiet — same outcome)."""
+        name = None
+        if isinstance(curve, ast.Call):
+            func = curve.func
+            if isinstance(func, ast.Attribute):
+                name = func.attr
+            elif isinstance(func, ast.Name):
+                # bare from-import idiom:
+                # `from ...asymmetric.ec import SECP192R1` — the curve
+                # name itself is the unambiguous signal.
+                name = func.id
+        return EC_CURVE_KEY_SIZES.get(name) if name else None
+
+    def _emit_weak_key_size(self, node, kind, size):
+        """Classify a resolved key size against the verified Bandit
+        thresholds and emit the finding (or stay quiet)."""
+        if size is None:
+            return
+        high, medium = WEAK_KEY_SIZE_THRESHOLDS[kind]
+        if size < high:
+            severity, threshold = "high", high
+        elif size < medium:
+            severity, threshold = "medium", medium
+        else:
+            return
+        self.add(
+            node, "weak-crypto-key-size", severity,
+            "%s key sizes below %d bits are considered breakable."
+            % (kind, threshold)
+        )
+
+    def _check_weak_key_size(self, node):
+        """weak-crypto-key-size (B505-equiv, wave 3). Qualified tail
+        matching, per the verified Bandit qual tables:
+        * pycrypto/pycryptodome: <Crypto|Cryptodome>.PublicKey.<RSA|DSA>
+          .generate with bits= or arg position 0;
+        * cryptography.io: rsa|dsa|ec.generate_private_key — key_size=
+          or arg position (RSA: 1, DSA: 0), EC resolved via the curve
+          registry. Tail matching covers the full dotted chains AND the
+          from-import alias receivers ("rsa.generate_private_key(...)"
+          — the canonical idiom); receiver-agnostic like B201/B601
+          (documented deviation: MIZAN resolves no imports). Missing
+          sizes stay quiet (Bandit defaults them to a safe 2048)."""
+        qual = self._dotted_name(node.func)
+        if not qual:
+            return
+        parts = qual.split(".")
+        # pycrypto/pycryptodome: the canonical idiom is the from-import
+        # alias form (`from Crypto.PublicKey import RSA; RSA.generate(
+        # 512)`) — a two-segment chain (B615 bare-form precedent: the
+        # alias IS the measured dominant idiom). Full dotted chains
+        # fire only under the REAL package roots (Crypto/Cryptodome,
+        # per the Bandit qual table) — a foreign root with a PublicKey
+        # segment is NOT a pycrypto call and stays quiet.
+        if (len(parts) >= 2 and parts[-1] == "generate"
+                and parts[-2] in ("RSA", "DSA")
+                and (len(parts) == 2
+                     or parts[0] in PYCRYPTO_KEY_ROOTS)):
+            bits = self._int_const(self._kwarg(node, "bits"))
+            if bits is None and node.args:
+                bits = self._int_const(node.args[0])
+            self._emit_weak_key_size(node, parts[-2], bits)
+            return
+        if (len(parts) >= 2 and parts[-1] == "generate_private_key"
+                and parts[-2] in ("rsa", "dsa", "ec")):
+            kind = parts[-2].upper()
+            if kind == "EC":
+                curve = self._kwarg(node, "curve")
+                if curve is None and node.args:
+                    curve = node.args[0]
+                size = self._curve_size(curve)
+                if size is not None:
+                    self._emit_weak_key_size(node, kind, size)
+                return
+            bits = self._int_const(self._kwarg(node, "key_size"))
+            pos = 1 if kind == "RSA" else 0
+            if bits is None and len(node.args) > pos:
+                bits = self._int_const(node.args[pos])
+            self._emit_weak_key_size(node, kind, bits)
+
     def _check_tmp_value(self, node, value):
         """Flag /tmp and /var/tmp literals in value positions, one nesting
         level into list/tuple/set literals (segment-boundary safe)."""
@@ -878,7 +1046,9 @@ class PythonSecurityVisitor(ast.NodeVisitor):
                     self._check_tmp_value(node, elt.value)
 
     def _check_bind_all_value(self, node, value):
-        """Flag bind-all interface literals ("0.0.0.0", "::") in value
+        """Flag bind-all interface literals ("0.0.0.0" — the exact
+        literal ONLY, per the verified Bandit B104 semantics and the
+        wave-2 measured rejection of the "::" extension) in value
         positions, one nesting level into list/tuple/set literals — the
         B104 value-position discipline mirroring _check_tmp_value."""
         if isinstance(value, ast.Constant):  # accept node or raw value
@@ -886,8 +1056,8 @@ class PythonSecurityVisitor(ast.NodeVisitor):
         if isinstance(value, str) and value in BIND_ALL_INTERFACES:
             self.add(
                 node, "hardcoded-bind-all-interfaces", "medium",
-                "Binding to all interfaces (0.0.0.0/::) exposes the "
-                "service on every network interface — bind explicitly."
+                "Binding to 0.0.0.0 exposes the service on every "
+                "network interface — bind explicitly."
             )
         elif isinstance(value, (ast.Tuple, ast.List, ast.Set)):
             for elt in value.elts:
@@ -1065,6 +1235,25 @@ def analyze_file(path, root, custom_rules=()):
                 "rule": "todo",
                 "severity": "info",
                 "message": "Unresolved development marker.",
+            })
+
+        # bidi-override-chars (B613-equiv, wave 3): Trojan Source bidi
+        # control characters (CVE-2021-42574), verified verbatim from
+        # the Bandit plugin. Text-level BY DESIGN — the attack lives in
+        # strings and comments, where an AST cannot see it. Bandit
+        # scans Python files; MIZAN's per-line loop covers every
+        # scannable language (documented extension) and reports every
+        # affected line instead of only the first (Bandit returns after
+        # one issue per file).
+        if BIDI_CHARS_RE.search(line):
+            findings.append({
+                "file": str(path.relative_to(root)),
+                "line": number,
+                "rule": "bidi-override-chars",
+                "severity": "high",
+                "message": "Bidirectional control character (Trojan "
+                           "Source, CVE-2021-42574) — the rendered order "
+                           "of this line differs from its parsed order.",
             })
 
     # v0.14.0 field-measured downgrade: in test-fixture paths the two

@@ -47,6 +47,9 @@ PLUGINS = (
             "ftplib-import",
             "ssl-insecure-version",
             "hf-unpinned-download",
+            # v0.15.0-dev Bandit-parity wave 3 (docs/BANDIT_PARITY.md)
+            "weak-crypto-key-size",
+            "bidi-override-chars",
             # v0.14.0-dev taint-analysis PoC (docs/ROADMAP.md P1.2):
             # dataflow rules — fire only on a confirmed source->sink path.
             "request-to-sql",

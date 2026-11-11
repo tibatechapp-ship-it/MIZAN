@@ -1,6 +1,6 @@
 # Bandit Parity Tracker — MIZAN
 
-Status: waves 1+2 shipped · Last reviewed: 2026-11-10 · Wave 1 released in MIZAN v0.13.0 · Wave 2 in v0.15.0-dev
+Status: waves 1+2+3 shipped · Last reviewed: 2026-11-11 · Wave 1 released in MIZAN v0.13.0 · Waves 2+3 in v0.15.0-dev
 
 > Governing rule (protocol): every row below is a **documented decision**, not
 > a claim. "adopted" rows are implemented in MIZAN's own engine and covered by
@@ -112,11 +112,11 @@ recorded decision.
 | B604 (`shell=True` on any function) | — | — | **rejected** | `obj.run(shell=True)` on arbitrary objects is not a shell — MIZAN's `shell-true` is subprocess-rooted (documented deviation, negative-tested) | 2026-11 |
 | B609 (linux wildcard) | — | — | **rejected** | same noise family as B607 (wave-1 rejection) | 2026-11 |
 | B313–B320 (XML/XXE family) | — | — | **deferred** | fires on ALL XML parsing regardless of input trust — needs the v0.15 taint engine for precision; revisit when taint covers file paths | 2026-11 |
-| B505 (weak key sizes) | — | — | **deferred** | needs constant key-size tracking (scope work) | 2026-11 |
+| B505 (weak key sizes) | `weak-crypto-key-size` | high/medium | **adopted** (wave 3, 2026-11-11) | the wave-2 deferred candidate adopted through the measured wave-3 pipeline — see the Wave 3 sections | 2026-11 |
 | B508/B509 (SNMP) | — | — | **deferred** | niche protocol surface; revisit if field demand measured | 2026-11 |
 | B610/B611 (Django ORM raw) | — | — | **deferred** | receiver-based `.extra(`/`.raw(` — needs receiver-type tracking; wave-3 candidate with taint | 2026-11 |
 | B612 (logging listen) | — | — | **deferred** | niche; low field presence | 2026-11 |
-| B613 (trojansource) | — | — | **deferred** | zero-noise candidate but text-level (not AST) — needs its own scan integration + severity verification; wave-3 candidate | 2026-11 |
+| B613 (trojansource) | `bidi-override-chars` | high | **adopted** (wave 3, 2026-11-11) | the wave-2 deferred candidate adopted through the measured wave-3 pipeline — see the Wave 3 sections | 2026-11 |
 | B702 (Mako) / B704 (Markup XSS) | — | — | **deferred** | template XSS needs taint for precision (B704 same family as adopted B703 `django-mark-safe`) | 2026-11 |
 
 "new" = implemented in wave 2 · "pre-existing" = verified equivalent rule
@@ -174,6 +174,88 @@ MIZAN self-scan = **25 targets / 3,997 files**.
 
 Gate artifacts: `fp_gate_wave2_v0150dev/gate_rows.json` (workspace).
 Test suite at time of writing: **596 tests green** (same CI command).
+
+## Wave 3 — status table (2026-11-11)
+
+Per the update cycle: severity/confidence and exact semantics
+re-verified from the per-check pages AND the plugin sources verbatim
+(`bandit/plugins/weak_cryptographic_key.py`, `trojansource.py`) before
+each recorded decision.
+
+| Bandit | MIZAN rule | Severity | Status | Rationale | Updated |
+|---|---|---|---|---|---|
+| B505 (`weak_cryptographic_key`) | `weak-crypto-key-size` | high/medium (per band) | **adopted** (new) | CWE-326 — thresholds verified verbatim from the plugin config: RSA/DSA high<1024 / medium<2048, EC high<160 / medium<224 via the Bandit curve registry; constant-integer sizes only | 2026-11 |
+| B613 (`trojansource`) | `bidi-override-chars` | high | **adopted** (new) | CWE-838 — Trojan Source bidi control chars (CVE-2021-42574); the `BIDI_CHARACTERS` tuple verified verbatim (U+202A-E, U+2066-2069, U+200F); text-level BY DESIGN (the attack lives in strings and comments, invisible to an AST) | 2026-11 |
+
+"new" = implemented in wave 3. The wave-2 deferred rows for B505/B613
+are flipped to "adopted (wave 3)" in the table above — the deferral
+record is preserved in git history and in the row text, not erased.
+
+## Wave 3 — documented deviations (negative-tested)
+
+1. **B505 scope**: pycrypto/pycryptodome fires on
+   `<Crypto\|Cryptodome>.PublicKey.<RSA\|DSA>.generate(...)` AND the
+   bare from-import alias form `RSA.generate(...)` / `DSA.generate(...)`
+   (the measured dominant idiom — B615 bare-form precedent). A FOREIGN
+   root with a PublicKey segment (`mylib.PublicKey.RSA.generate`) stays
+   quiet — caught by the acceptance suite before the field gate ran,
+   corrected, re-measured.
+2. **B505 arg discipline**: `bits=` / `key_size=` kwargs or exact
+   positional positions (pycrypto: 0; cryptography RSA: 1 — the
+   public exponent comes first; DSA: 0). Dynamic, string-valued,
+   boolean and MISSING sizes stay quiet (Bandit: strings "can't be
+   processed"; missing defaults to a safe 2048). MIZAN additionally
+   excludes bool literals (Bandit would classify `True < 1024` — a
+   nonsensical size; documented MIZAN deviation).
+3. **B505 EC curves**: resolved through the Bandit curve registry
+   (verbatim); qualified `ec.SECP192R1()` and bare from-import
+   `SECT163K1()` call forms fire (the curve name itself is the
+   unambiguous signal); unknown/dynamic curves default to 224 bits
+   (Bandit behavior) and classify quiet. Only SECP192R1 (192) and
+   SECT163K1/SECT163R2 (163) can fire — all MEDIUM by the verified
+   thresholds.
+4. **B505 receiver tail matching**: `rsa\|dsa\|ec.generate_private_key`
+   fires for full dotted chains AND from-import alias receivers —
+   receiver-agnostic like B201/B601 (MIZAN resolves no imports;
+   documented deviation family).
+5. **B613 language scope**: Bandit scans Python files only; MIZAN's
+   per-line loop covers every scannable language (documented
+   extension). Measured consequence below: the 6 non-Python gate hits
+   exist only through this extension.
+6. **B613 reporting**: Bandit returns after the FIRST issue per file;
+   MIZAN reports EVERY affected line (more actionable; measured gate
+   impact: 2 sites in one guard file instead of 1).
+7. **B613 U+200F kept**: full Bandit parity (10 chars). The plausible
+   Arabic-UI FP class (RLM inside legitimate RTL display strings) did
+   NOT occur in the gate sample (`tawteen`: 0 hits); residual risk
+   documented — revisit on field evidence, not speculation.
+
+## Wave 3 — field measurement (2026-11-11)
+
+Same protocol as wave 2: read-only scans, every hit hand-checked
+against its source line — with raw-codepoint dumps (bidi characters
+are invisible; the hand-check must see the bytes). Sample: the same
+local repo copies + `tawteen` + MIZAN self-scan = **25 targets**.
+
+- **8 hits, 8/8 hand-checked — 0 structural false positives, 8
+  context-dependent**: 6× invisible-char-stripping regexes in
+  `ai-job-search` TypeScript CLIs (`.agents/skills/*/cli/src/helpers.ts`
+  — an `INVISIBLE_CHARS` sanitizer; the source comments describe the
+  intent) + `BIDI`/`BIDI_TAMPER` constants in the same repo's
+  `tools/posting_guard.py` (an explicit bidi-tamper guard). All eight
+  are DEFENSIVE definitions of the same character set — the legitimate
+  mirror of the rule; classified like the wave-1 self-scan hits
+  (context-dependent, review lead, non-blocking). Bandit itself would
+  flag the two Python sites (file-level, Python-only).
+- `weak-crypto-key-size`: **0 hits** in the sample — measured-zero by
+  absence (the wave-2 method for flask-debug/telnetlib/ftplib/
+  ssl-insecure-version/paramiko-exec-command).
+- `tawteen` (Arabic package): 0 hits — the RLM-in-Arabic-strings FP
+  class did not occur in the sample.
+
+Gate artifacts: `fp_gate_wave3_v0150dev/gate_rows.json` (workspace).
+Test suite at time of writing: **603 tests green** (same CI command:
+`python -m unittest discover -s tests`).
 
 ## Suppression policy — `# nosec` is not honored (fail-loud)
 
