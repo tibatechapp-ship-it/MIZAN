@@ -86,6 +86,10 @@ POSITIVES = [
     ("hardcoded-secret", "sample_secret.py",
      'password = "hardcoded_123"\n',
      "hardcoded-secret-candidate"),
+    ("hardcoded-secret-mixed-ref", "sample_mixed_secret.py",
+     'password = "Bearer $REAL_TOKEN"\n'
+     'deploy_key = "prefix-$VAR-suffix"\n',
+     "hardcoded-secret-candidate"),
     ("eval-dynamic", "sample_eval.py",
      "user_input = input()\neval(user_input)\n",
      "dynamic-execution"),
@@ -145,6 +149,11 @@ NEGATIVES = [
      'api_key = "sk-keyless-smoke"\n'
      'password = "my-example-value"\n'
      'token = "CHANGEME"\n'),
+    ("env-reference-secrets", "env_passed.py",
+     'password = "$MIZAN_PR_TOKEN"\n'
+     'db_token = "${DB_PASS}"\n'
+     'api_token = "$GITHUB_PERSONAL_ACCESS_TOKEN"\n'
+     "helper = 'echo password=\"$MIZAN_PR_TOKEN\"; f'\n"),
 ]
 
 
