@@ -1,6 +1,6 @@
 # CLI surface — measured, not claimed
 
-Snapshot of `mizan --help` at 0.15.0-dev (2026-11-10), 19 subcommands.
+Snapshot of `mizan --help` at 0.15.0-dev (2026-11-10), 22 subcommands.
 Purpose strings are verbatim from each command's own `--help` output (or from
 the README table where a command exposes no one-liner). The Network/Token
 columns come from an import audit of the implementing modules: `urllib`
@@ -28,7 +28,57 @@ contract; write-capable flows are explicit, user-driven commands.
 | `approve` | Safely auto-approve and optionally merge eligible PRs | no (local git) | no | git state (explicit) |
 | `fix` | Apply safe dependency upgrades with test-based validation | no — runs your tests locally | no | yes (explicit) |
 | `baseline` | Save current findings as a gate baseline (delta scanning) | no | no | `.mizan/baseline.json` |
+| `import-sarif` | Import an external SARIF 2.1.0 report (Semgrep, Gitleaks, Trivy, Bandit, ...) into MIZAN's normalized finding schema — read-only, provenance preserved, failures are loud | no | no | no (output file only if `--output`) |
+| `merge-findings` | Merge several SARIF reports into grouped findings — link, never erase: every occurrence keeps its tool and evidence | no | no | no (output file only if `--output`) |
+| `triage` | Apply documented review decisions to imported findings — decisions referencing unknown fingerprints are rejected | no | no | no (output file only if `--output`) |
 | `portfolio` | Aggregate full-scan results for MULTIPLE repositories into one self-contained HTML report (display layer) | no | no | HTML output |
+
+### `merge-findings` and `triage` — link, never erase (wave 1)
+
+```bash
+mizan merge-findings semgrep.sarif gitleaks.sarif trivy.sarif --output merged.json
+mizan triage merged.json --decisions review.json --output triaged.json
+```
+
+`merge-findings` imports every report (same contract as `import-sarif`)
+and groups the findings by their stable fingerprint into
+`mizan.merged.v1`. Groups keep every occurrence verbatim with its own
+tool, rule, and evidence — a finding is never dropped because another
+tool disagreed, and removing one report from the merge can never erase
+another tool's findings.
+
+`triage` applies documented review decisions from a JSON object
+(`{fingerprint: accepted|false_positive}`). Decisions referencing
+fingerprints absent from the findings fail loudly with exit **2** —
+suppression is only possible against a documented, imported finding
+(MIZAN does not honor blind `# nosec`-style suppression). Every applied
+decision stamps `triage_source: review-file` for auditability.
+
+`mizan.external_gate.v1` (module `mizan.integrations.merge`) gates the
+merged findings on the verbatim severity carried from the source tool:
+`unknown` never blocks, triaged findings never block, and blocking is an
+exact match — no case-folding, no silent severity-ladder normalization.
+
+### `import-sarif` — unified external-report contract (wave 0)
+
+```bash
+mizan import-sarif semgrep.sarif                # normalized findings to stdout
+mizan import-sarif trivy.sarif --output out.json
+```
+
+Reads a SARIF 2.1.0 report produced by any external scanner and emits
+`mizan.import.v1`: every finding keeps its originating tool
+(`tool.driver.name`), rule id, location, original SARIF `tool_level`, and a
+stable fingerprint (SARIF `partialFingerprints` win; otherwise a
+deterministic SHA-256). SARIF levels are deliberately NOT mapped to MIZAN
+severities — that judgment belongs to documented triage. No tool is
+executed and no dependency is required; MIZAN only parses the report.
+
+No-silent-clean: a missing, unreadable, or structurally invalid report
+fails with the path in the message and exits **2** (incomplete) — a failed
+import is never certified as an empty result set. Strictness is
+intentional: a malformed result entry fails the import instead of being
+silently skipped.
 
 ## Exit contract (enforced, documented in README §The gate)
 

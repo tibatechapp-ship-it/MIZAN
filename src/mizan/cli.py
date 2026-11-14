@@ -338,6 +338,42 @@ def main(argv=None):
     )
     doc_cmd.add_argument("--output", default=None)
 
+    import_cmd = commands.add_parser(
+        "import-sarif",
+        help=(
+            "Import an external SARIF 2.1.0 report (Semgrep, Gitleaks, "
+            "Trivy, Bandit, ...) into MIZAN's normalized finding schema "
+            "— read-only, provenance preserved, failures are loud"
+        ),
+    )
+    import_cmd.add_argument("report", metavar="REPORT")
+    import_cmd.add_argument("--output", default=None)
+
+    merge_cmd = commands.add_parser(
+        "merge-findings",
+        help=(
+            "Merge several SARIF reports into grouped findings — link, "
+            "never erase: every occurrence keeps its tool and evidence"
+        ),
+    )
+    merge_cmd.add_argument(
+        "reports", nargs="+", metavar="REPORT"
+    )
+    merge_cmd.add_argument("--output", default=None)
+
+    triage_cmd = commands.add_parser(
+        "triage",
+        help=(
+            "Apply documented review decisions to imported findings — "
+            "decisions referencing unknown fingerprints are rejected"
+        ),
+    )
+    triage_cmd.add_argument("findings", metavar="FINDINGS_JSON")
+    triage_cmd.add_argument(
+        "--decisions", required=True, metavar="JSON"
+    )
+    triage_cmd.add_argument("--output", default=None)
+
     ledger_cmd = commands.add_parser("ledger")
     ledger_cmd.add_argument("message")
     ledger_cmd.add_argument(
@@ -441,7 +477,90 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     try:
-        if args.command == "inspect":
+        if args.command == "import-sarif":
+            from .integrations.sarif_import import (
+                SarifImportError,
+                import_sarif_report,
+            )
+            try:
+                result = import_sarif_report(args.report)
+            except SarifImportError as exc:
+                # Exit contract: 2 = incomplete. A report that cannot be
+                # read or parsed is never certified as a clean import
+                # (docs/DEV_PLAN_V0150.md, wave 0).
+                parser.error(str(exc))
+            rendered = json.dumps(result, indent=2, ensure_ascii=False)
+            save_or_print(rendered, args.output)
+            return 0
+
+        elif args.command == "merge-findings":
+            from .integrations.merge import MergeError, merge_findings
+            from .integrations.sarif_import import (
+                SarifImportError,
+                normalize_sarif,
+            )
+            lists = []
+            try:
+                for report_path in args.reports:
+                    lists.append(normalize_sarif(report_path))
+                result = merge_findings(lists)
+            except (SarifImportError, MergeError) as exc:
+                # Exit contract: 2 = incomplete — a missing/invalid
+                # report never merges into a clean result.
+                parser.error(str(exc))
+            rendered = json.dumps(result, indent=2, ensure_ascii=False)
+            save_or_print(rendered, args.output)
+            return 0
+
+        elif args.command == "triage":
+            from .integrations.merge import MergeError, apply_triage
+            try:
+                with open(args.findings, "r", encoding="utf-8") as fh:
+                    payload = json.load(fh)
+            except (OSError, json.JSONDecodeError) as exc:
+                parser.error(
+                    f"Cannot read findings file {args.findings}: {exc}"
+                )
+            if isinstance(payload, dict) and isinstance(
+                payload.get("findings"), list
+            ):
+                findings = payload["findings"]
+            elif isinstance(payload, dict) and isinstance(
+                payload.get("groups"), list
+            ):
+                # mizan.merged.v1: flatten occurrences — every group's
+                # evidence travels into the triage decisions intact.
+                findings = [
+                    occurrence
+                    for group in payload["groups"]
+                    for occurrence in group.get("occurrences", [])
+                ]
+            elif isinstance(payload, list):
+                findings = payload
+            else:
+                parser.error(
+                    f"{args.findings} must be a findings list, a "
+                    "mizan.import.v1 summary, or a mizan.merged.v1 "
+                    "summary"
+                )
+            try:
+                with open(args.decisions, "r", encoding="utf-8") as fh:
+                    decisions = json.load(fh)
+            except (OSError, json.JSONDecodeError) as exc:
+                parser.error(
+                    f"Cannot read decisions file {args.decisions}: {exc}"
+                )
+            try:
+                result = apply_triage(findings, decisions)
+            except (MergeError, ValueError) as exc:
+                # Exit contract: 2 = incomplete — undocumented
+                # suppression is never certified as applied.
+                parser.error(str(exc))
+            rendered = json.dumps(result, indent=2, ensure_ascii=False)
+            save_or_print(rendered, args.output)
+            return 0
+
+        elif args.command == "inspect":
             result = inspect_repository(args.path)
             print(json.dumps(result, indent=2, ensure_ascii=False))
 
