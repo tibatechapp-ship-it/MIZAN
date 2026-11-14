@@ -189,7 +189,7 @@ display layer for governance visibility, explicitly not a GRC platform.
 
 ## Project status
 
-**Current release: Version 0.15.0-dev (in development — latest stable: 0.14.0)** — the field-hardening wave on top of
+**Current release: Version 0.15.0** — the integrations and measurement cycle on top of the field-hardening wave: a unified external-findings contract (`import-sarif` — SARIF 2.1.0 in, `mizan.finding.v1` out, provenance preserved verbatim, failures are loud), merge/triage/external gate (link, never erase; documented decisions only), a published measurement methodology (`docs/MEASUREMENT.md` — precision 100/100, recall 100/100 on the frozen 20-rule corpus, enforced by a docs gate), an optional Semgrep connector with a measured reference run (Semgrep OSS 1.185.0), and the structured `repair-request.v1` handoff for coding agents (evidence first, human review always required). 691 tests green. Read-only, offline, as always. At the v0.14.0 tag: the field-hardening wave on top of
 the measurement toolkit: a 50-repo `scan-remote` campaign (2026-11-08,
 Python/TypeScript AI repos) measured the engine end-to-end and fixed what
 it broke: internal tarball symlinks now materialize safely (out-of-tree
@@ -217,6 +217,7 @@ Only findings whose fingerprint is not in the baseline reach the gate.
 
 ## Evolution
 
+- **v0.15.0** — integrations and measurement cycle (2026-11-14): wave 0 unified external-findings contract (`mizan import-sarif`, `mizan.finding.v1`, no silent severity mapping, incomplete-never-clean exit 2), wave 1 merge/triage/external gate (link-never-erase with a regression test proving report removal cannot erase evidence), wave 2 published measurement (deterministic frozen-corpus counter, byte-identical reruns, `docs/MEASUREMENT.md` gated by CI, optional Semgrep connector — 10 contract tests, real reference run recorded rerun-stable, precision/recall 100/100), and wave 3 `repair-request.v1` (evidence-first refusal names what must be measured, published JSON schema with drift test, live CLI smoke) — 691 tests green at the tag, README count enforced by the docs gate.
 - **v0.14.0** — field-hardening wave (50-repo scan-remote campaign,
   2026-11-08): scan-remote safe materialization of INTERNAL tarball
   symlinks + skip-and-record oversize assets (15 pre-fix aborts on real
