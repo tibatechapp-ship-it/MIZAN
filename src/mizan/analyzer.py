@@ -296,6 +296,12 @@ def _is_placeholder(value: str) -> bool:
         return True
     if any(marker in norm for marker in PLACEHOLDER_MARKERS):
         return True
+    # v0.17.0-dev wave 1 field-measured (nexus-core evidence scan, PR #95,
+    # scan commit 1371c54 — tech_targets.py:49): 'sk-abc123...' inside a
+    # task-description string. A truncated/ellipsized value is
+    # documentation text, never a usable credential — 1/1 measured site.
+    if "..." in norm:
+        return True
     # degenerate values: "********", "----------", "1111111111"
     return len(set(norm)) <= 2
 
@@ -417,6 +423,146 @@ class PythonSecurityVisitor(ast.NodeVisitor):
         # B202-equiv scope carve-out (tar symlink traversal does not apply
         # to the zip format).
         self.zipfile_vars = zipfile_vars or set()
+        # v0.17.0-dev wave 1: per-scope fragment-binding tracking for the
+        # measured sql-injection negatives (_sql_fragments_all_safe). The
+        # base dict is module scope; each FunctionDef pushes a child scope.
+        self._fn_stack = [{}]
+
+    # -- v0.17.0-dev wave 1: SQL fragment resolver ------------------------
+
+    # "const-collection" is safe as a JOIN iterable too: every element is
+    # a string literal, so the joined text is literal whatever the order.
+    _SAFE_FRAG_STATES = ("const", "append-literals", "whitelist",
+                         "const-collection")
+
+    def _frag_state(self, name):
+        """Innermost-first lookup of a tracked fragment binding."""
+        for scope in reversed(self._fn_stack):
+            if name in scope:
+                return scope[name]
+        return None
+
+    @staticmethod
+    def _is_const_str_expr(node):
+        """A string literal, or a ternary whose both arms are literals."""
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return True
+        if isinstance(node, ast.IfExp) and (
+                isinstance(node.body, ast.Constant)
+                and isinstance(node.body.value, str)
+                and isinstance(node.orelse, ast.Constant)
+                and isinstance(node.orelse.value, str)):
+            return True
+        return False
+
+    def _classify_binding(self, value):
+        """Fragment-binding class for an assignment value. Anything not
+        provably literal/whitelist-built is 'unsafe' — the conservative
+        direction (the finding stays flagged)."""
+        if isinstance(value, ast.Constant) and isinstance(value.value, str):
+            return "const"
+        if isinstance(value, ast.IfExp):
+            return "const" if self._is_const_str_expr(value) else "unsafe"
+        if isinstance(value, (ast.Set, ast.Tuple, ast.List)):
+            # literal collection (possibly empty) — whitelist source
+            if all(isinstance(e, ast.Constant) for e in value.elts):
+                return "const-collection"
+            return "unsafe"
+        if isinstance(value, ast.ListComp):
+            targets = set()
+            for gen in value.generators:
+                if isinstance(gen.target, ast.Name):
+                    targets.add(gen.target.id)
+                else:
+                    return "unsafe"
+            guarded = False
+            for gen in value.generators:
+                for cond in gen.ifs:
+                    if isinstance(cond, ast.Compare) and len(cond.ops) == 1 \
+                            and isinstance(cond.ops[0], ast.In):
+                        src = cond.comparators[0]
+                        if isinstance(src, ast.Name) and \
+                                self._frag_state(src.id) == "const-collection":
+                            guarded = True
+                        elif isinstance(src, (ast.Set, ast.List, ast.Tuple)) \
+                                and all(isinstance(e, ast.Constant)
+                                        for e in src.elts):
+                            guarded = True
+            if guarded and self._elt_references_targets(value.elt, targets):
+                return "whitelist"
+            return "unsafe"
+        return "unsafe"
+
+    def _elt_references_targets(self, elt, targets):
+        """True when a comprehension element only interpolates the
+        comprehension's own target names (or literal text)."""
+        if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
+            return True
+        if isinstance(elt, ast.Name):
+            return elt.id in targets
+        if isinstance(elt, ast.JoinedStr):
+            for v in elt.values:
+                if not isinstance(v, ast.FormattedValue):
+                    continue
+                if not (isinstance(v.value, ast.Name)
+                        and v.value.id in targets):
+                    return False
+            return True
+        return False
+
+    def _sql_fragments_all_safe(self, arg0):
+        """v0.17.0-dev wave 1 — measured negatives from the nexus-core
+        evidence scan (PR #95, engine commit 7aded07, scan commit
+        1371c54, report digest 07af33c5...):
+          * session_store.py:301/486/741 — column fragments built from
+            literal appends or from a comprehension guarded by a literal
+            whitelist (`if k in allowed`), values bound via ? params;
+          * memory/engine.py:147 — a WHERE fragment assigned a ternary of
+            two string literals, values bound via ? params.
+        The finding is suppressed ONLY when EVERY interpolated/concated
+        fragment resolves to literal text or a whitelist-guarded builder
+        AND the call passes bound parameters — every other shape stays
+        flagged exactly as before."""
+        if isinstance(arg0, ast.BinOp):
+            return self._concat_fragments_safe(arg0)
+        if isinstance(arg0, ast.JoinedStr):
+            for v in arg0.values:
+                if not isinstance(v, ast.FormattedValue):
+                    continue
+                if v.format_spec is not None:
+                    return False
+                if not self._fragment_expr_safe(v.value):
+                    return False
+            return True
+        return False
+
+    def _concat_fragments_safe(self, node):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return True
+        if isinstance(node, ast.Name):
+            return self._frag_state(node.id) in self._SAFE_FRAG_STATES
+        if isinstance(node, ast.IfExp):
+            return self._is_const_str_expr(node)
+        if isinstance(node, ast.BinOp):
+            return self._concat_fragments_safe(node.left) and \
+                self._concat_fragments_safe(node.right)
+        return False
+
+    def _fragment_expr_safe(self, expr):
+        if isinstance(expr, ast.Constant) and isinstance(expr.value, str):
+            return True
+        if isinstance(expr, ast.Name):
+            return self._frag_state(expr.id) in self._SAFE_FRAG_STATES
+        if isinstance(expr, ast.Call) and \
+                isinstance(expr.func, ast.Attribute) and \
+                expr.func.attr == "join" and expr.args:
+            iterable = expr.args[0]
+            if isinstance(iterable, ast.Name):
+                return self._frag_state(iterable.id) in self._SAFE_FRAG_STATES
+            if isinstance(iterable, (ast.List, ast.Tuple)) and \
+                    all(isinstance(e, ast.Constant) for e in iterable.elts):
+                return True
+        return False
 
     def add(self, node, rule, severity, message):
         self.findings.append({
@@ -483,12 +629,38 @@ class PythonSecurityVisitor(ast.NodeVisitor):
 
     # -- visitor ----------------------------------------------------------
 
+    def visit_FunctionDef(self, node):
+        self._fn_stack.append({})
+        self.generic_visit(node)
+        self._fn_stack.pop()
+
+    def visit_AsyncFunctionDef(self, node):
+        self._fn_stack.append({})
+        self.generic_visit(node)
+        self._fn_stack.pop()
+
     def visit_Call(self, node):
         name = None
         if isinstance(node.func, ast.Name):
             name = node.func.id
         elif isinstance(node.func, ast.Attribute):
             name = node.func.attr
+
+        # v0.17.0-dev wave 1: fragment-fragment accumulation for the
+        # measured sql-injection negatives — X.append("literal = ?")
+        # builds a safe fragment list; one non-literal append poisons it.
+        if isinstance(node.func, ast.Attribute) and \
+                node.func.attr == "append" and \
+                isinstance(node.func.value, ast.Name):
+            recv = node.func.value.id
+            scope = self._fn_stack[-1]
+            arg0 = node.args[0] if node.args else None
+            if arg0 is not None and self._is_const_str_expr(arg0):
+                if scope.get(recv) not in ("unsafe", "whitelist",
+                                           "const-collection"):
+                    scope[recv] = "append-literals"
+            else:
+                scope[recv] = "unsafe"
 
         if name in {"eval", "exec", "compile", "__import__"}:
             # v0.12.3 — bare-call boundary on the Python AST path too.
@@ -508,6 +680,18 @@ class PythonSecurityVisitor(ast.NodeVisitor):
             if isinstance(node.func, ast.Name):
                 if name == "__import__" and node.args and isinstance(
                         node.args[0], ast.Constant):
+                    pass
+                elif name == "compile":
+                    # v0.17.0-dev wave 1 (nexus-core evidence scan, PR #95,
+                    # scan commit 1371c54 — 5/5 measured sites):
+                    # self_improve.py:222, tester.py:37,
+                    # multilang_analyzer.py:45, code_guardian.py:194,
+                    # agent_loop/tools.py:222 — bare compile() inside
+                    # try/except SyntaxError is a SYNTAX CHECK; compile
+                    # never executes its argument. When the result feeds
+                    # exec()/eval(), that enclosing bare call is already
+                    # flagged as dynamic-execution, so recall is unchanged
+                    # while the measured false-positive class disappears.
                     pass
                 else:
                     self.add(
@@ -655,7 +839,10 @@ class PythonSecurityVisitor(ast.NodeVisitor):
                 and _fstring_has_value_interpolation(
                     arg0, self.placeholder_vars)
             )
-            if injectable:
+            if injectable and not (
+                len(node.args) >= 2
+                and self._sql_fragments_all_safe(arg0)
+            ):
                 self.add(
                     node, "sql-injection", "high",
                     "SQL built by string concatenation or interpolation — "
@@ -943,6 +1130,19 @@ class PythonSecurityVisitor(ast.NodeVisitor):
         self._check_tmp_value(node, node.value)
         # hardcoded-bind-all-interfaces (B104-equiv): same positions.
         self._check_bind_all_value(node, node.value)
+        # v0.17.0-dev wave 1: fragment-builder binding tracking for the
+        # measured sql-injection negatives (_sql_fragments_all_safe).
+        # Simple Name targets only; any unsafe binding poisons the name.
+        if isinstance(node.value, (ast.Constant, ast.IfExp, ast.ListComp,
+                                   ast.Set, ast.Tuple, ast.List)):
+            state = self._classify_binding(node.value)
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    if state == "unsafe" or \
+                            self._fn_stack[-1].get(target.id) == "unsafe":
+                        self._fn_stack[-1][target.id] = "unsafe"
+                    else:
+                        self._fn_stack[-1][target.id] = state
         self.generic_visit(node)
 
     def visit_AnnAssign(self, node):
