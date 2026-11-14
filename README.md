@@ -81,7 +81,7 @@ not aspirational marketing.
 | Sampled findings verified true positives | **20/20**, zero security FPs | v0.12.0 field notes |
 | MIZAN scanning its own repository | **0 actionable findings** across all scanners | v0.12.1+, strict `--gate` |
 | Field benchmark — 100 real open-source repos (zai-org first, Nov 2026) | **median 1.04 s / repo**, 0 crashes, 0 timeouts | v0.12.2 field wave |
-| Test suite | **691 tests green**, Python 3.10–3.14 | CI, every push |
+| Test suite | **727 tests green**, Python 3.10–3.14 | CI, every push |
 | Trusted CI steps that can hide a failure | **0** (`continue-on-error` removed) | v0.12.1 |
 
 ## Quickstart
@@ -189,7 +189,7 @@ display layer for governance visibility, explicitly not a GRC platform.
 
 ## Project status
 
-**Current release: Version 0.16.0-dev (in development — latest stable: 0.15.0)** — the integrations and measurement cycle on top of the field-hardening wave: a unified external-findings contract (`import-sarif` — SARIF 2.1.0 in, `mizan.finding.v1` out, provenance preserved verbatim, failures are loud), merge/triage/external gate (link, never erase; documented decisions only), a published measurement methodology (`docs/MEASUREMENT.md` — precision 100/100, recall 100/100 on the frozen 20-rule corpus, enforced by a docs gate), an optional Semgrep connector with a measured reference run (Semgrep OSS 1.185.0), and the structured `repair-request.v1` handoff for coding agents (evidence first, human review always required). 691 tests green at the v0.15.0 tag. Read-only, offline, as always. At the v0.14.0 tag: the field-hardening wave on top of
+**Current release: Version 0.16.0-dev (in development — latest stable: 0.15.0)** — the integrations and measurement cycle on top of the field-hardening wave: a unified external-findings contract (`import-sarif` — SARIF 2.1.0 in, `mizan.finding.v1` out, provenance preserved verbatim, failures are loud), merge/triage/external gate (link, never erase; documented decisions only), a published measurement methodology (`docs/MEASUREMENT.md` — precision 100/100, recall 100/100 on the frozen 20-rule corpus, enforced by a docs gate), an optional Semgrep connector with a measured reference run (Semgrep OSS 1.185.0), the structured `repair-request.v1` handoff for coding agents (evidence first, human review always required), and — measured in this dev cycle — `verify-repair`: the agent's patch is applied ONLY inside an isolated git worktree, tested with no secrets and no network by default, and the report (`mizan.repair-verification.v1`) states the changed files, the tests that ran, whether the original finding's fingerprint still fires, and the isolation limits — transfer with explicit approval or delete, nothing else. 691 tests green at the v0.15.0 tag. Read-only, offline, as always. At the v0.14.0 tag: the field-hardening wave on top of
 the measurement toolkit: a 50-repo `scan-remote` campaign (2026-11-08,
 Python/TypeScript AI repos) measured the engine end-to-end and fixed what
 it broke: internal tarball symlinks now materialize safely (out-of-tree

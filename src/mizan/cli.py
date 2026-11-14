@@ -385,6 +385,53 @@ def main(argv=None):
     repair_req_cmd.add_argument("findings", metavar="FINDINGS_JSON")
     repair_req_cmd.add_argument("--output", default=None)
 
+    verify_cmd = commands.add_parser(
+        "verify-repair",
+        help=(
+            "Verify one repair-request.v1 patch in an isolated git "
+            "worktree: apply, run tests without secrets and without "
+            "network by default, measure diff + result; transfer or "
+            "delete — the user's tree is never written"
+        ),
+    )
+    verify_cmd.add_argument("request", metavar="REQUEST_JSON")
+    verify_cmd.add_argument(
+        "--patch", required=True, metavar="PATCH.diff",
+        help="the coding agent's unified diff",
+    )
+    verify_cmd.add_argument(
+        "--repo", default=".", metavar="PATH",
+        help="the repository to verify against (default: cwd)",
+    )
+    verify_cmd.add_argument(
+        "--tests", default=None, metavar="CMD",
+        help=(
+            "test command inside the worktree (default: python -m "
+            "unittest discover -q)"
+        ),
+    )
+    verify_cmd.add_argument(
+        "--allow-network", action="store_true",
+        help="keep proxy env vars for the test run (default: stripped)",
+    )
+    verify_cmd.add_argument(
+        "--keep", action="store_true",
+        help="keep the worktree for inspection instead of disposing it",
+    )
+    verify_cmd.add_argument(
+        "--transfer-branch", default=None, metavar="NAME",
+        help="create this branch with the verified patch (needs --approve)",
+    )
+    verify_cmd.add_argument(
+        "--approve", action="store_true",
+        help="explicit human approval for the transfer — required",
+    )
+    verify_cmd.add_argument(
+        "--timeout", type=int, default=600, metavar="SECONDS",
+        help="test/git subprocess timeout (default: 600)",
+    )
+    verify_cmd.add_argument("--output", default=None)
+
     ledger_cmd = commands.add_parser("ledger")
     ledger_cmd.add_argument("message")
     ledger_cmd.add_argument(
@@ -623,6 +670,48 @@ def main(argv=None):
                     f"merge"
                 )
             return 0
+
+        elif args.command == "verify-repair":
+            from .integrations.verify_repair import (
+                VerifyRepairError,
+                run_verification,
+                write_verification_report,
+            )
+            try:
+                report = run_verification(
+                    request_path=args.request,
+                    patch_path=args.patch,
+                    repo_path=args.repo,
+                    tests_command=args.tests,
+                    allow_network=args.allow_network,
+                    keep_worktree=args.keep,
+                    transfer_branch=args.transfer_branch,
+                    approve=args.approve,
+                    timeout=args.timeout,
+                )
+            except VerifyRepairError as exc:
+                # Exit contract: 2 = refusal — invalid request, patch
+                # that does not apply, missing approval; the message
+                # names the path and the reason, never a bare error.
+                parser.error(str(exc))
+            write_verification_report(report, args.output)
+            if args.output:
+                print(
+                    f"verify-repair: verified={report['verified']} "
+                    f"finding={report['request']['finding_id'][:19]}… "
+                    f"still_fires="
+                    f"{report['finding_check']['original_still_fires']} "
+                    f"new_findings="
+                    f"{report['finding_check']['new_findings_count']} "
+                    f"tests_passed={report['tests']['passed']} "
+                    f"transferred={report['transfer']['done']} "
+                    f"-> {args.output}"
+                )
+            else:
+                print(json.dumps(report, indent=2, ensure_ascii=False))
+            # Exit contract: 0 = patch verified, 1 = verification
+            # measured a failure (stated in the report, never silent).
+            return 0 if report["verified"] else 1
 
         elif args.command == "inspect":
             result = inspect_repository(args.path)

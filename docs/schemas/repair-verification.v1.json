@@ -1,0 +1,188 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/tibatechapp-ship-it/MIZAN/main/docs/schemas/repair-verification.v1.json",
+  "title": "MIZAN repair verification (repair-verification.v1)",
+  "description": "The measured result of applying one repair-request.v1 patch inside an isolated git worktree: changed files, whether the original finding still fires, findings the patch introduced, the tests that ran (no secrets, no network by default), the transfer decision (explicit approval only), and the honestly declared isolation limits. The original finding fingerprint persists verbatim through the round trip.",
+  "type": "object",
+  "required": [
+    "schema",
+    "request",
+    "repo",
+    "head_before",
+    "worktree",
+    "patch",
+    "finding_check",
+    "tests",
+    "checks",
+    "verified",
+    "transfer",
+    "isolation_limits",
+    "human_review_required"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {"const": "mizan.repair-verification.v1"},
+    "request": {
+      "type": "object",
+      "required": ["schema", "finding_id", "evidence", "human_review_required"],
+      "additionalProperties": false,
+      "properties": {
+        "schema": {"const": "repair-request.v1"},
+        "finding_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The original finding's fingerprint, carried through the round trip unchanged (identity persistence)."
+        },
+        "evidence": {
+          "type": "object",
+          "description": "The request's evidence block, verbatim."
+        },
+        "confidence": {"enum": ["high", "medium", "low", null]},
+        "human_review_required": {"const": true}
+      }
+    },
+    "repo": {"type": "string", "minLength": 1},
+    "head_before": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$",
+      "description": "The commit the isolated worktree was created from."
+    },
+    "worktree": {
+      "type": "object",
+      "required": ["path", "base", "created", "disposed", "isolation"],
+      "additionalProperties": false,
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "base": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "created": {"const": true},
+        "disposed": {
+          "type": "boolean",
+          "description": "true = removed after the report (default); false = kept via --keep for human inspection."
+        },
+        "isolation": {"type": "string", "minLength": 1}
+      }
+    },
+    "patch": {
+      "type": "object",
+      "required": ["path", "applied", "changed_files", "diff_stat"],
+      "additionalProperties": false,
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "applied": {"const": true},
+        "changed_files": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "diff_stat": {"type": "string"}
+      }
+    },
+    "finding_check": {
+      "type": "object",
+      "required": [
+        "original_finding_id",
+        "original_still_fires",
+        "before_findings_on_changed_files",
+        "after_findings_on_changed_files",
+        "new_findings_count",
+        "new_findings",
+        "custom_rules_errors"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "original_finding_id": {"type": "string", "minLength": 1},
+        "original_still_fires": {"type": "boolean"},
+        "before_findings_on_changed_files": {"type": "integer", "minimum": 0},
+        "after_findings_on_changed_files": {"type": "integer", "minimum": 0},
+        "new_findings_count": {"type": "integer", "minimum": 0},
+        "new_findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["file", "line", "rule", "message", "fingerprint"],
+            "additionalProperties": false,
+            "properties": {
+              "file": {"type": "string"},
+              "line": {"type": "integer"},
+              "rule": {"type": "string"},
+              "message": {"type": "string"},
+              "fingerprint": {"type": "string"}
+            }
+          }
+        },
+        "custom_rules_errors": {
+          "type": "array",
+          "description": "Broken repo-local policies make the verification incomplete — never a certified pass."
+        }
+      }
+    },
+    "tests": {
+      "type": "object",
+      "required": [
+        "command", "ran", "passed", "returncode", "cwd", "environment"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "command": {"type": "string", "minLength": 1},
+        "ran": {"type": "boolean"},
+        "passed": {"type": "boolean"},
+        "returncode": {"type": ["integer", "null"]},
+        "cwd": {"type": "string", "minLength": 1},
+        "summary": {"type": "string"},
+        "environment": {
+          "type": "object",
+          "required": ["secrets_scrubbed", "scrubbed_var_count", "scrubbed_var_names", "network", "network_vars_removed"],
+          "additionalProperties": false,
+          "properties": {
+            "secrets_scrubbed": {"const": true},
+            "scrubbed_var_count": {"type": "integer", "minimum": 0},
+            "scrubbed_var_names": {"type": "array", "items": {"type": "string"}},
+            "network": {
+              "enum": ["proxies-stripped-default", "allowed-by-explicit-flag"]
+            },
+            "network_vars_removed": {"type": "array", "items": {"type": "string"}}
+          }
+        }
+      }
+    },
+    "checks": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "object",
+        "required": ["what", "status", "passed"],
+        "additionalProperties": false,
+        "properties": {
+          "what": {"type": "string", "minLength": 1},
+          "status": {"enum": ["measured", "declared-only"]},
+          "passed": {
+            "description": "boolean for measured checks; null for declared-only steps a human must verify."
+          },
+          "note": {"type": "string"}
+        }
+      }
+    },
+    "verified": {"type": "boolean"},
+    "transfer": {
+      "type": "object",
+      "required": ["requested", "branch", "approved", "done", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "requested": {"type": "boolean"},
+        "branch": {"description": "the review branch name when requested; null otherwise."},
+        "approved": {"type": "boolean"},
+        "done": {"type": "boolean"},
+        "reason": {
+          "description": "why a requested transfer did not happen (e.g. the verification failed) — null when done."
+        }
+      }
+    },
+    "isolation_limits": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1},
+      "description": "What the isolation actually enforces and what it only declares — never oversold."
+    },
+    "human_review_required": {"const": true}
+  }
+}

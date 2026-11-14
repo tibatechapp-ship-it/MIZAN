@@ -24,7 +24,7 @@ listing).
 
 | Group | Modules | Measured role |
 |---|---|---|
-| CLI & gate | `cli.py`, `gate.py` | 19 subcommands (measured via `--help`, see `docs/CLI.md`); honest exit contract — 0 clean, 1 blocking findings, 2 incomplete |
+| CLI & gate | `cli.py`, `gate.py` | 24 subcommands (measured via `--help`, see `docs/CLI.md`); honest exit contract — 0 clean, 1 blocking findings, 2 incomplete |
 | Discovery | `inspector.py`, `detector.py` | repository structure discovery and technology detection |
 | Static analysis | `analyzer.py`, `scan.py`, `scanner.py`, `code_quality.py`, `semgrep_scanner.py` | read-only source scanning; the Python path is AST-based, other languages use line-level patterns (measured gap, tracked as ROADMAP P1 — multi-language accuracy gate) |
 | Dataflow (PoC) | `taint.py`, `reachability.py` | single-file Python taint with documented PoC limits in the module docstring (no function-boundary isolation, no cross-module flow, no aliasing); shallow informational reachability |

@@ -32,6 +32,7 @@ contract; write-capable flows are explicit, user-driven commands.
 | `merge-findings` | Merge several SARIF reports into grouped findings — link, never erase: every occurrence keeps its tool and evidence | no | no | no (output file only if `--output`) |
 | `triage` | Apply documented review decisions to imported findings — decisions referencing unknown fingerprints are rejected | no | no | no (output file only if `--output`) |
 | `repair-request` | Build a structured `repair-request.v1` handoff for a coding agent — evidence first, no guessing, human review always required | no | no | no (output file only if `--output`) |
+| `verify-repair` | Verify one repair request's patch inside an isolated git worktree — apply, test with no secrets and no network by default, measure the diff and the result; transfer with explicit approval (`--approve`) or delete — the user's tree is never written | no (local git + test subprocess) | no | git worktree under the system temp dir (disposed unless `--keep`), review branch only with explicit approval |
 | `portfolio` | Aggregate full-scan results for MULTIPLE repositories into one self-contained HTML report (display layer) | no | no | HTML output |
 
 ### `repair-request` — structured handoff to a coding agent (wave 3)
@@ -105,6 +106,40 @@ fails with the path in the message and exits **2** (incomplete) — a failed
 import is never certified as an empty result set. Strictness is
 intentional: a malformed result entry fails the import instead of being
 silently skipped.
+
+### `verify-repair` — isolated repair verification (wave 4)
+
+```bash
+mizan verify-repair request.json \
+  --patch agent-fix.diff --repo . \
+  [--tests "python -m unittest discover -q"] \
+  [--output verification.json]
+```
+
+Takes ONE `repair-request.v1` (or a one-request batch) plus the coding
+agent's unified diff, and verifies the patch in an isolated `git
+worktree` (detached HEAD) — the user's tree is never written. The test
+run gets an environment with NO secrets (every variable whose name
+carries a secret marker — `TOKEN`, `SECRET`, `PASSWORD`, `CREDENTIAL`,
+`AWS_`, `GIT_`, ... — is removed) and NO network by default (proxy
+variables stripped; `--allow-network` keeps them). The report
+(`mizan.repair-verification.v1`, schema at
+`docs/schemas/repair-verification.v1.json`) records: the changed files,
+whether the original finding's fingerprint still fires, findings the
+patch introduced, the tests that ran and their output tail, the
+scrubbed variables by name, and the declared isolation limits — what
+is enforced and what only declared, never oversold.
+
+Exit contract: **0** = the patch verified (finding gone, no new
+findings, tests passed); **1** = verification measured a failure —
+stated in the report, never silent (a timed-out or empty test run
+never counts as a pass); **2** = refusal naming the path and the
+reason (invalid request, patch that does not apply,
+`--transfer-branch` without `--approve`, existing branch). An
+unverified patch is never transferred; without `--keep` the worktree
+is disposed after the report — transfer or delete, nothing else. A
+transferred branch carries `human_review_required=true` in its commit
+message; MIZAN never merges it.
 
 ## Exit contract (enforced, documented in README §The gate)
 
