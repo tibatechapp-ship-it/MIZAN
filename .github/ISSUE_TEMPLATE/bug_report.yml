@@ -1,0 +1,65 @@
+name: Bug report
+description: Report a wrong finding, a false positive, a silent failure, or a crash.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting. MIZAN is read-only: it never modifies your
+        tree and never executes user code. If you found a security
+        vulnerability in MIZAN itself, follow SECURITY.md instead of a public
+        issue.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which scanner or surface?
+      options:
+        - secrets scanner
+        - code/static scanner
+        - dependencies/manifests
+        - CI/workflow scanner
+        - documentation scanner
+        - SARIF output
+        - repair-request / verify-repair
+        - portfolio (multi-repo)
+        - CLI / exit codes
+        - GitHub Action
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: Include the exact command and the exact output (paths may be redacted).
+      placeholder: command → expected vs actual, including the exit code
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: MIZAN version
+      placeholder: "python -m mizan --version  (or pip show mizan)"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: "OS, Python version (3.10–3.14)"
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: The smallest file + command that reproduces it. Synthetic secrets only.
+    validations:
+      required: true
+  - type: checkboxes
+    id: sanity
+    attributes:
+      label: Sanity checks
+      options:
+        - label: The report labels the result honestly (clean / incomplete / finding)
+        - label: No real credentials were pasted into this issue

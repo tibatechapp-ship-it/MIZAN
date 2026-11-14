@@ -1,0 +1,46 @@
+name: Feature request
+description: Propose a capability, a detection rule, or an integration.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        MIZAN's bar: measured, not marketed. Describe how the improvement
+        would be measured, not only what it would do.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What can a user not do today, or what does MIZAN miss today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Command shape, report shape, exit-code behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: measurement
+    attributes:
+      label: How would we measure it?
+      description: |
+        Golden positives and golden negatives for a detection rule; the
+        counter that proves the change; how precision/recall would be
+        observed. Rules that cannot distinguish golden negatives are
+        postponed, not shipped.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Constraints acknowledged
+      options:
+        - label: Must stay read-only and offline by default
+        - label: Must not add a mandatory external dependency
+        - label: New findings must surface as named, reproducible evidence

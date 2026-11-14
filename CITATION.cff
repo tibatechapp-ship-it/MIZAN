@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+title: MIZAN Security — read-only security engine
+message: >-
+  If you use MIZAN Security in your research or tooling, please cite it
+  using this metadata.
+type: software
+authors:
+  - name: MIZAN Security Contributors
+    website: https://github.com/tibatechapp-ship-it/MIZAN
+version: 0.17.0-dev
+date-released: "2026-11-15"
+license: MIT
+repository-code: https://github.com/tibatechapp-ship-it/MIZAN
+abstract: >-
+  A read-only, offline security engine that inspects code, secrets,
+  dependencies, CI configuration and documentation in a single pass,
+  explains findings in plain language, and never executes user code.
+  Ships eight scanners, honest exit codes (0/1/2), SARIF 2.1.0 output,
+  an evidence portfolio across many repositories, and isolated repair
+  verification.
+keywords:
+  - security
+  - static-analysis
+  - sarif
+  - secrets
+  - ci-security
+  - supply-chain
