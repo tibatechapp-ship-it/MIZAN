@@ -1,0 +1,483 @@
+{
+ "tool": "semgrep",
+ "tool_version": "1.185.0",
+ "reference_version": "1.185.0",
+ "version_match": true,
+ "command": [
+  "/home/z/.venv/bin/semgrep",
+  "scan",
+  "--config",
+  "/home/z/my-project/MIZAN_dev/tests/benchmark/fixtures/semgrep_local_rules.yaml",
+  "--sarif",
+  "--output",
+  "<temp-out>",
+  "."
+ ],
+ "sarif_version": "2.1.0",
+ "status": "complete",
+ "import": {
+  "schema": "mizan.import.v1",
+  "report": "semgrep.sarif",
+  "tools": [
+   "Semgrep OSS"
+  ],
+  "count": 9,
+  "scan_complete": true,
+  "findings": [
+   {
+    "schema": "mizan.finding.v1",
+    "source": {
+     "tool": "Semgrep OSS",
+     "rule_id": "home.z.my-project.MIZAN_dev.tests.benchmark.fixtures.local-eval-call"
+    },
+    "location": {
+     "file": "edge/04_nosec_comment.py",
+     "line": 2
+    },
+    "message": "eval() call — dynamic execution surface",
+    "tool_level": null,
+    "severity": "unknown",
+    "fingerprint": "sha256:f55e0a4a29615e8e145c6c865d6c9f858db197f9772d0e92a6960b593c2ef46a",
+    "evidence": {
+     "kind": "external-sarif",
+     "report": "semgrep.sarif"
+    },
+    "triage": "unreviewed"
+   },
+   {
+    "schema": "mizan.finding.v1",
+    "source": {
+     "tool": "Semgrep OSS",
+     "rule_id": "home.z.my-project.MIZAN_dev.tests.benchmark.fixtures.local-eval-call"
+    },
+    "location": {
+     "file": "edge/11_eval_constant_string.py",
+     "line": 1
+    },
+    "message": "eval() call — dynamic execution surface",
+    "tool_level": null,
+    "severity": "unknown",
+    "fingerprint": "sha256:a6a54b6ccfb3b774423e873329442bb20a2a2267f3a62b2e08631225755df98c",
+    "evidence": {
+     "kind": "external-sarif",
+     "report": "semgrep.sarif"
+    },
+    "triage": "unreviewed"
+   },
+   {
+    "schema": "mizan.finding.v1",
+    "source": {
+     "tool": "Semgrep OSS",
+     "rule_id": "home.z.my-project.MIZAN_dev.tests.benchmark.fixtures.local-hardcoded-password"
+    },
+    "location": {
+     "file": "negative/hardcoded-secret-candidate/03_placeholder_value.py",
+     "line": 1
+    },
+    "message": "hard-coded password-like literal",
+    "tool_level": null,
+    "severity": "unknown",
+    "fingerprint": "sha256:2fb4cc39db3baa2a54c844660b5d3f36a81a884aeed4bb19103b57c7de48915b",
+    "evidence": {
+     "kind": "external-sarif",
+     "report": "semgrep.sarif"
+    },
+    "triage": "unreviewed"
+   },
+   {
+    "schema": "mizan.finding.v1",
+    "source": {
+     "tool": "Semgrep OSS",
+     "rule_id": "home.z.my-project.MIZAN_dev.tests.benchmark.fixtures.local-eval-call"
+    },
+    "location": {
+     "file": "positive/dynamic-execution/01_eval_name.py",
+     "line": 2
+    },
+    "message": "eval() call — dynamic execution surface",
+    "tool_level": null,
+    "severity": "unknown",
+    "fingerprint": "sha256:ea7b44a4fce8d57df787b8377ebcacef926f4953963cc69c82dbdfab5ba06670",
+    "evidence": {
+     "kind": "external-sarif",
+     "report": "semgrep.sarif"
+    },
+    "triage": "unreviewed"
+   },
+   {
+    "schema": "mizan.finding.v1",
+    "source": {
+     "tool": "Semgrep OSS",
+     "rule_id": "home.z.my-project.MIZAN_dev.tests.benchmark.fixtures.local-eval-call"
+    },
+    "location": {
+     "file": "positive/dynamic-execution/03_eval_module_level.py",
+     "line": 1
+    },
+    "message": "eval() call — dynamic execution surface",
+    "tool_level": null,
+    "severity": "unknown",
+    "fingerprint": "sha256:41c913b86ba032a0c887c470a827f9300f8e1c08daa755a3173fc1ee0799190c",
+    "evidence": {
+     "kind": "external-sarif",
+     "report": "semgrep.sarif"
+    },
+    "triage": "unreviewed"
+   },
+   {
+    "schema": "mizan.finding.v1",
+    "source": {
+     "tool": "Semgrep OSS",
+     "rule_id": "home.z.my-project.MIZAN_dev.tests.benchmark.fixtures.local-hardcoded-password"
+    },
+    "location": {
+     "file": "positive/hardcoded-secret-candidate/01_password.py",
+     "line": 1
+    },
+    "message": "hard-coded password-like literal",
+    "tool_level": null,
+    "severity": "unknown",
+    "fingerprint": "sha256:1d92c79abf4ff3c9453a83f1b20846e54a13bdbe5b7abbd1c62d6f32599cda5f",
+    "evidence": {
+     "kind": "external-sarif",
+     "report": "semgrep.sarif"
+    },
+    "triage": "unreviewed"
+   },
+   {
+    "schema": "mizan.finding.v1",
+    "source": {
+     "tool": "Semgrep OSS",
+     "rule_id": "home.z.my-project.MIZAN_dev.tests.benchmark.fixtures.local-hardcoded-password"
+    },
+    "location": {
+     "file": "positive/hardcoded-secret-candidate/02_api_key.py",
+     "line": 1
+    },
+    "message": "hard-coded password-like literal",
+    "tool_level": null,
+    "severity": "unknown",
+    "fingerprint": "sha256:8ad1f48f651f33bae123d160f37782f2f4fdb566e0f08ec203c45e41efbf3410",
+    "evidence": {
+     "kind": "external-sarif",
+     "report": "semgrep.sarif"
+    },
+    "triage": "unreviewed"
+   },
+   {
+    "schema": "mizan.finding.v1",
+    "source": {
+     "tool": "Semgrep OSS",
+     "rule_id": "home.z.my-project.MIZAN_dev.tests.benchmark.fixtures.local-hardcoded-password"
+    },
+    "location": {
+     "file": "positive/hardcoded-secret-candidate/03_token.py",
+     "line": 1
+    },
+    "message": "hard-coded password-like literal",
+    "tool_level": null,
+    "severity": "unknown",
+    "fingerprint": "sha256:74850d7dd0c4627d8f1397c040b1d58fc38cf862fe29aae060a96032a04beec1",
+    "evidence": {
+     "kind": "external-sarif",
+     "report": "semgrep.sarif"
+    },
+    "triage": "unreviewed"
+   },
+   {
+    "schema": "mizan.finding.v1",
+    "source": {
+     "tool": "Semgrep OSS",
+     "rule_id": "home.z.my-project.MIZAN_dev.tests.benchmark.fixtures.local-hardcoded-password"
+    },
+    "location": {
+     "file": "positive/hardcoded-secret-candidate/04_secret.py",
+     "line": 1
+    },
+    "message": "hard-coded password-like literal",
+    "tool_level": null,
+    "severity": "unknown",
+    "fingerprint": "sha256:b5a940669944aabb143f895219e1f0c1dce12008de1025774eca81c979578cd0",
+    "evidence": {
+     "kind": "external-sarif",
+     "report": "semgrep.sarif"
+    },
+    "triage": "unreviewed"
+   }
+  ]
+ },
+ "target_files": [
+  "edge/01_secret_split_concat.py",
+  "edge/02_env_password.py",
+  "edge/03_sql_helper_fn.py",
+  "edge/04_nosec_comment.py",
+  "edge/05_literal_eval_safe.py",
+  "edge/06_shell_true_constant.py",
+  "edge/07_fstring_sql_identifier.py",
+  "edge/08_pickle_constant_bytes.py",
+  "edge/09_import_alias_pickle.py",
+  "edge/10_zipfile_direct_extractall.py",
+  "edge/11_eval_constant_string.py",
+  "edge/12_torch_alias.py",
+  "edge/13_full_load_not_flagged.py",
+  "edge/14_tmp_segment_boundary.py",
+  "edge/15_import_constant_lazy.py",
+  "edge/16_shell_true_single_report.py",
+  "negative/django-mark-safe/01_escape.py",
+  "negative/django-mark-safe/02_format_html.py",
+  "negative/django-mark-safe/03_unmark_safe.py",
+  "negative/django-mark-safe/04_conditional_escape.py",
+  "negative/django-mark-safe/05_name_reference.py",
+  "negative/dynamic-execution/01_literal_eval.py",
+  "negative/dynamic-execution/02_method_eval.py",
+  "negative/dynamic-execution/03_re_compile.py",
+  "negative/dynamic-execution/04_getattr.py",
+  "negative/dynamic-execution/05_eval_in_prose.py",
+  "negative/hardcoded-secret-candidate/01_environ.py",
+  "negative/hardcoded-secret-candidate/02_getpass.py",
+  "negative/hardcoded-secret-candidate/03_placeholder_value.py",
+  "negative/hardcoded-secret-candidate/04_field_name.py",
+  "negative/hardcoded-secret-candidate/05_input.py",
+  "negative/hardcoded-tmp-path/01_tempfile.py",
+  "negative/hardcoded-tmp-path/02_relative_tmp.py",
+  "negative/hardcoded-tmp-path/03_template_boundary.py",
+  "negative/hardcoded-tmp-path/04_var_folders.py",
+  "negative/hardcoded-tmp-path/05_environ_tmpdir.py",
+  "negative/hf-trust-remote-code/01_trust_false.py",
+  "negative/hf-trust-remote-code/02_no_kwarg.py",
+  "negative/hf-trust-remote-code/03_trust_var.py",
+  "negative/hf-trust-remote-code/04_local_only.py",
+  "negative/hf-trust-remote-code/05_pipeline_plain.py",
+  "negative/input-to-subprocess/01_const_system.py",
+  "negative/input-to-subprocess/02_clean_run.py",
+  "negative/input-to-subprocess/03_const_popen.py",
+  "negative/input-to-subprocess/04_untainted_name.py",
+  "negative/input-to-subprocess/05_env_only.py",
+  "negative/jinja2-autoescape-false/01_autoescape_true.py",
+  "negative/jinja2-autoescape-false/02_select_autoescape.py",
+  "negative/jinja2-autoescape-false/03_no_kwarg.py",
+  "negative/jinja2-autoescape-false/04_autoescape_var.py",
+  "negative/jinja2-autoescape-false/05_sandboxed.py",
+  "negative/path-traversal/01_open_literal.py",
+  "negative/path-traversal/02_open_join_base.py",
+  "negative/path-traversal/03_open_pathlib.py",
+  "negative/path-traversal/04_open_constant_name.py",
+  "negative/path-traversal/05_open_with_literal.py",
+  "negative/process-execution/01_platform_system.py",
+  "negative/process-execution/02_method_system.py",
+  "negative/process-execution/03_subprocess_run.py",
+  "negative/process-execution/04_os_environ.py",
+  "negative/process-execution/05_system_in_prose.py",
+  "negative/request-to-sql/01_constant_name.py",
+  "negative/request-to-sql/02_clean_local.py",
+  "negative/request-to-sql/03_request_method_attr.py",
+  "negative/request-to-sql/04_orm_query.py",
+  "negative/request-to-sql/05_parameterized.py",
+  "negative/request-without-timeout/01_get_timeout.py",
+  "negative/request-without-timeout/02_post_timeout_const.py",
+  "negative/request-without-timeout/03_session_ctor.py",
+  "negative/request-without-timeout/04_session_receiver.py",
+  "negative/request-without-timeout/05_head_timeout_zero.py",
+  "negative/shell-true/01_run_list.py",
+  "negative/shell-true/02_run_shell_false.py",
+  "negative/shell-true/03_call_no_shell.py",
+  "negative/shell-true/04_popen_no_shell.py",
+  "negative/shell-true/05_run_shell_var.py",
+  "negative/sql-injection/01_parameterized.py",
+  "negative/sql-injection/02_constant.py",
+  "negative/sql-injection/03_params_tuple.py",
+  "negative/sql-injection/04_fstring_identifier.py",
+  "negative/sql-injection/05_executescript_const.py",
+  "negative/ssl-unverified-context/01_default_context.py",
+  "negative/ssl-unverified-context/02_sslcontext.py",
+  "negative/ssl-unverified-context/03_default_https_context.py",
+  "negative/ssl-unverified-context/04_urlopen_default.py",
+  "negative/ssl-unverified-context/05_verified_wrap.py",
+  "negative/tarfile-extractall/01_filter_data.py",
+  "negative/tarfile-extractall/02_filter_tar.py",
+  "negative/tarfile-extractall/03_zipfile_with.py",
+  "negative/tarfile-extractall/04_zipfile_assigned.py",
+  "negative/tarfile-extractall/05_list_only.py",
+  "negative/tls-verification-disabled/01_verify_true.py",
+  "negative/tls-verification-disabled/02_verify_const.py",
+  "negative/tls-verification-disabled/03_no_verify_kw.py",
+  "negative/tls-verification-disabled/04_verify_attr.py",
+  "negative/tls-verification-disabled/05_verify_string.py",
+  "negative/torch-unsafe-load/01_weights_only_true.py",
+  "negative/torch-unsafe-load/02_torch_save.py",
+  "negative/torch-unsafe-load/03_np_load.py",
+  "negative/torch-unsafe-load/04_torch_zeros.py",
+  "negative/torch-unsafe-load/05_json_load.py",
+  "negative/unsafe-deserialization/01_json_load.py",
+  "negative/unsafe-deserialization/02_pickle_dumps.py",
+  "negative/unsafe-deserialization/03_marshal_dumps.py",
+  "negative/unsafe-deserialization/04_literal_eval.py",
+  "negative/unsafe-deserialization/05_json_loads.py",
+  "negative/weak-crypto/01_sha256.py",
+  "negative/weak-crypto/02_new_sha256.py",
+  "negative/weak-crypto/03_md5_ufs_false.py",
+  "negative/weak-crypto/04_sha1_ufs_false.py",
+  "negative/weak-crypto/05_blake2.py",
+  "negative/yaml-unsafe-load/01_safe_load.py",
+  "negative/yaml-unsafe-load/02_safeloader_kw.py",
+  "negative/yaml-unsafe-load/03_safeloader_positional.py",
+  "negative/yaml-unsafe-load/04_csafeloader.py",
+  "negative/yaml-unsafe-load/05_yaml_dump.py",
+  "positive/django-mark-safe/01_direct.py",
+  "positive/django-mark-safe/02_in_return.py",
+  "positive/django-mark-safe/03_module_attr.py",
+  "positive/django-mark-safe/04_comprehension.py",
+  "positive/django-mark-safe/05_as_argument.py",
+  "positive/dynamic-execution/01_eval_name.py",
+  "positive/dynamic-execution/02_exec_name.py",
+  "positive/dynamic-execution/03_eval_module_level.py",
+  "positive/dynamic-execution/04_compile.py",
+  "positive/dynamic-execution/05_dynamic_import.py",
+  "positive/hardcoded-secret-candidate/01_password.py",
+  "positive/hardcoded-secret-candidate/02_api_key.py",
+  "positive/hardcoded-secret-candidate/03_token.py",
+  "positive/hardcoded-secret-candidate/04_secret.py",
+  "positive/hardcoded-secret-candidate/05_uppercase_const.py",
+  "positive/hardcoded-tmp-path/01_open_tmp.py",
+  "positive/hardcoded-tmp-path/02_assign_tmp.py",
+  "positive/hardcoded-tmp-path/03_listdir_var_tmp.py",
+  "positive/hardcoded-tmp-path/04_list_literal.py",
+  "positive/hardcoded-tmp-path/05_kwarg_tmp.py",
+  "positive/hf-trust-remote-code/01_auto_model.py",
+  "positive/hf-trust-remote-code/02_pipeline.py",
+  "positive/hf-trust-remote-code/03_with_revision.py",
+  "positive/hf-trust-remote-code/04_tokenizer.py",
+  "positive/hf-trust-remote-code/05_config.py",
+  "positive/input-to-subprocess/01_input_system.py",
+  "positive/input-to-subprocess/02_argv_run.py",
+  "positive/input-to-subprocess/03_list_element.py",
+  "positive/input-to-subprocess/04_fstring_taint.py",
+  "positive/input-to-subprocess/05_fixpoint_chain.py",
+  "positive/jinja2-autoescape-false/01_env.py",
+  "positive/jinja2-autoescape-false/02_with_loader.py",
+  "positive/jinja2-autoescape-false/03_module_path.py",
+  "positive/jinja2-autoescape-false/04_in_function.py",
+  "positive/jinja2-autoescape-false/05_trim_blocks.py",
+  "positive/path-traversal/01_open_input.py",
+  "positive/path-traversal/02_open_argv.py",
+  "positive/path-traversal/03_open_tainted_name.py",
+  "positive/path-traversal/04_open_tainted_argv_chain.py",
+  "positive/path-traversal/05_fixpoint_chain.py",
+  "positive/process-execution/01_os_system.py",
+  "positive/process-execution/02_os_popen.py",
+  "positive/process-execution/03_bare_system.py",
+  "positive/process-execution/04_bare_popen.py",
+  "positive/process-execution/05_os_system_const.py",
+  "positive/request-to-sql/01_args_name.py",
+  "positive/request-to-sql/02_form_fstring_identifier.py",
+  "positive/request-to-sql/03_direct_json.py",
+  "positive/request-to-sql/04_get_dict.py",
+  "positive/request-to-sql/05_headers_executemany.py",
+  "positive/request-without-timeout/01_get.py",
+  "positive/request-without-timeout/02_post.py",
+  "positive/request-without-timeout/03_head.py",
+  "positive/request-without-timeout/04_put.py",
+  "positive/request-without-timeout/05_request_verb.py",
+  "positive/shell-true/01_run_shell_true.py",
+  "positive/shell-true/02_call_shell_true.py",
+  "positive/shell-true/03_popen_shell_true.py",
+  "positive/shell-true/04_check_output_shell_true.py",
+  "positive/shell-true/05_run_in_function.py",
+  "positive/sql-injection/01_concat.py",
+  "positive/sql-injection/02_fstring_value.py",
+  "positive/sql-injection/03_percent_format.py",
+  "positive/sql-injection/04_self_cursor.py",
+  "positive/sql-injection/05_str_format.py",
+  "positive/ssl-unverified-context/01_ssl_module.py",
+  "positive/ssl-unverified-context/02_as_kwarg.py",
+  "positive/ssl-unverified-context/03_bare_star_import.py",
+  "positive/ssl-unverified-context/04_in_function.py",
+  "positive/ssl-unverified-context/05_assigned_and_used.py",
+  "positive/tarfile-extractall/01_plain.py",
+  "positive/tarfile-extractall/02_path_kw.py",
+  "positive/tarfile-extractall/03_members_kw.py",
+  "positive/tarfile-extractall/04_in_function.py",
+  "positive/tarfile-extractall/05_filter_fully_trusted.py",
+  "positive/tls-verification-disabled/01_requests_get.py",
+  "positive/tls-verification-disabled/02_requests_post.py",
+  "positive/tls-verification-disabled/03_httpx_get.py",
+  "positive/tls-verification-disabled/04_session_request.py",
+  "positive/tls-verification-disabled/05_client_get.py",
+  "positive/torch-unsafe-load/01_load_plain.py",
+  "positive/torch-unsafe-load/02_map_location.py",
+  "positive/torch-unsafe-load/03_weights_only_false.py",
+  "positive/torch-unsafe-load/04_in_function.py",
+  "positive/torch-unsafe-load/05_buffer.py",
+  "positive/unsafe-deserialization/01_pickle_load.py",
+  "positive/unsafe-deserialization/02_pickle_loads.py",
+  "positive/unsafe-deserialization/03_marshal_loads.py",
+  "positive/unsafe-deserialization/04_dill_load.py",
+  "positive/unsafe-deserialization/05_shelve_open.py",
+  "positive/weak-crypto/01_md5.py",
+  "positive/weak-crypto/02_sha1.py",
+  "positive/weak-crypto/03_new_md5.py",
+  "positive/weak-crypto/04_new_sha1.py",
+  "positive/weak-crypto/05_new_md5_uppercase.py",
+  "positive/yaml-unsafe-load/01_load_default.py",
+  "positive/yaml-unsafe-load/02_loader_kw_unsafe.py",
+  "positive/yaml-unsafe-load/03_full_loader_kw.py",
+  "positive/yaml-unsafe-load/04_positional_loader.py",
+  "positive/yaml-unsafe-load/05_unsafe_load_fn.py"
+ ],
+ "findings": [
+  [
+   "home.z.my-project.MIZAN_dev.tests.benchmark.fixtures.local-eval-call",
+   "edge/04_nosec_comment.py",
+   2,
+   null
+  ],
+  [
+   "home.z.my-project.MIZAN_dev.tests.benchmark.fixtures.local-eval-call",
+   "edge/11_eval_constant_string.py",
+   1,
+   null
+  ],
+  [
+   "home.z.my-project.MIZAN_dev.tests.benchmark.fixtures.local-eval-call",
+   "positive/dynamic-execution/01_eval_name.py",
+   2,
+   null
+  ],
+  [
+   "home.z.my-project.MIZAN_dev.tests.benchmark.fixtures.local-eval-call",
+   "positive/dynamic-execution/03_eval_module_level.py",
+   1,
+   null
+  ],
+  [
+   "home.z.my-project.MIZAN_dev.tests.benchmark.fixtures.local-hardcoded-password",
+   "negative/hardcoded-secret-candidate/03_placeholder_value.py",
+   1,
+   null
+  ],
+  [
+   "home.z.my-project.MIZAN_dev.tests.benchmark.fixtures.local-hardcoded-password",
+   "positive/hardcoded-secret-candidate/01_password.py",
+   1,
+   null
+  ],
+  [
+   "home.z.my-project.MIZAN_dev.tests.benchmark.fixtures.local-hardcoded-password",
+   "positive/hardcoded-secret-candidate/02_api_key.py",
+   1,
+   null
+  ],
+  [
+   "home.z.my-project.MIZAN_dev.tests.benchmark.fixtures.local-hardcoded-password",
+   "positive/hardcoded-secret-candidate/03_token.py",
+   1,
+   null
+  ],
+  [
+   "home.z.my-project.MIZAN_dev.tests.benchmark.fixtures.local-hardcoded-password",
+   "positive/hardcoded-secret-candidate/04_secret.py",
+   1,
+   null
+  ]
+ ]
+}

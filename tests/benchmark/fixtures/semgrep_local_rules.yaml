@@ -1,0 +1,25 @@
+# Local, offline Semgrep rule config for the measured reference run
+# (docs/MEASUREMENT.md, Wave 2). Two deliberately minimal rules exist to
+# prove the PIPELINE — real Semgrep → real SARIF → Wave-0 import
+# contract with the source preserved — NOT to contest MIZAN's rule
+# accuracy. The measured counts from this config are reported as-is.
+rules:
+  - id: local-eval-call
+    languages: [python]
+    message: eval() call — dynamic execution surface
+    severity: WARNING
+    patterns:
+      - pattern: eval(...)
+
+  - id: local-hardcoded-password
+    languages: [python]
+    message: hard-coded password-like literal
+    severity: WARNING
+    patterns:
+      - pattern: $KEY = $VAL
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: (?i)^(password|passwd|pwd|secret|api_key|token)$
+      - metavariable-regex:
+          metavariable: $VAL
+          regex: ^"[^"]+"$
