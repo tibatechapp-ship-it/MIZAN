@@ -1,6 +1,6 @@
 # CLI surface — measured, not claimed
 
-Snapshot of `mizan --help` at 0.15.0 (2026-11-14), 23 subcommands.
+Snapshot of `mizan --help` at 0.16.0 (2026-11-14), 24 subcommands.
 Purpose strings are verbatim from each command's own `--help` output (or from
 the README table where a command exposes no one-liner). The Network/Token
 columns come from an import audit of the implementing modules: `urllib`
