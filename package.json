@@ -1,6 +1,6 @@
 {
   "name": "mizan",
-  "version": "0.15.0",
+  "version": "0.16.0-dev",
   "type": "module",
   "devDependencies": {
     "eslint": "^9.39.5"
