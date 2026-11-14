@@ -300,6 +300,26 @@ def _is_placeholder(value: str) -> bool:
     return len(set(norm)) <= 2
 
 
+# v0.15.0-dev: a PURE shell runtime variable reference ("$MIZAN_PR_TOKEN",
+# "${DB_PASS}") dereferences at run time — nothing is hardcoded. This is
+# the env-passing pattern MIZAN itself mandates for tokens (the git
+# credential-helper protocol in repair.py), so it must not fire as a
+# "hardcoded" candidate. Brace-wrapped slots ({var}) are already handled
+# in _is_placeholder; anything beyond a single bare $reference — literal
+# text around it ("Bearer $TOKEN", "prefix-$VAR-suffix") — still fires.
+ENV_REFERENCE_PATTERN = re.compile(
+    r"""^(?:\$\{[A-Za-z_][A-Za-z0-9_]*\}      # ${VAR} — braced shell/JS
+        |\$[A-Za-z_][A-Za-z0-9_]*           # $VAR  — bare shell/JS
+       )$""",
+    re.VERBOSE,
+)
+
+
+def _is_env_reference(value: str) -> bool:
+    """True when a secret-candidate value is a pure shell variable reference."""
+    return bool(ENV_REFERENCE_PATTERN.fullmatch(value.strip()))
+
+
 # A f-string interpolation sitting AFTER one of these tails is in a VALUE
 # position (comparable / assignable) — that is where injection happens.
 # Interpolation in identifier positions (FROM {table}, INTO {tbl}) is the
@@ -1218,7 +1238,8 @@ def analyze_file(path, root, custom_rules=()):
     for number, line in enumerate(content.splitlines(), 1):
         match = (SECRET_PATTERN.search(line)
                  or SECRET_PATTERN_BARE.search(line))
-        if match and not _is_placeholder(match.group("value")):
+        if (match and not _is_placeholder(match.group("value"))
+                and not _is_env_reference(match.group("value"))):
             findings.append({
                 "file": str(path.relative_to(root)),
                 "line": number,
