@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -461,8 +462,24 @@ def run_verification(
             )
             tests["ran"] = True
             tests["returncode"] = proc.returncode
-            tests["passed"] = proc.returncode == 0
-            tests["summary"] = _summary_tail(proc.stdout, proc.stderr)
+            # An empty suite must never count as a pass: Python < 3.12
+            # exits 0 when the discovery collects zero tests — the
+            # output is the honest signal, not the exit code.
+            combined = f"{proc.stdout or ''}\n{proc.stderr or ''}"
+            zero_tests = bool(
+                re.search(r"^Ran 0 tests\b", combined, re.MULTILINE)
+            )
+            tests["zero_tests_detected"] = zero_tests
+            tests["passed"] = (
+                proc.returncode == 0 and not zero_tests
+            )
+            if zero_tests:
+                tests["summary"] = (
+                    "the test command reported 'Ran 0 tests' — an "
+                    "empty suite never counts as a pass\n"
+                ) + _summary_tail(proc.stdout, proc.stderr)
+            else:
+                tests["summary"] = _summary_tail(proc.stdout, proc.stderr)
         except subprocess.TimeoutExpired as exc:
             tests["ran"] = True
             tests["returncode"] = None

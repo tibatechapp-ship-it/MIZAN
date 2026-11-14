@@ -626,10 +626,15 @@ class MeasuredFailureTests(unittest.TestCase):
         self.assertFalse(report2["verified"])
         self.assertTrue(report2["tests"]["ran"])
         self.assertFalse(report2["tests"]["passed"])
-        self.assertNotEqual(report2["tests"]["returncode"], 0)
+        # Python < 3.12 exits 0 on zero collected tests — the honest
+        # signal is the output, so the flag must be set on every
+        # supported version.
+        self.assertTrue(report2["tests"]["zero_tests_detected"])
         # "Ran 0 tests" is printed by every supported Python; the
         # wording after it differs across versions.
         self.assertIn("Ran 0 tests", report2["tests"]["summary"])
+        self.assertIn("never counts as a pass",
+                      report2["tests"]["summary"])
 
 
 class CliContractTests(unittest.TestCase):

@@ -129,6 +129,10 @@
         "returncode": {"type": ["integer", "null"]},
         "cwd": {"type": "string", "minLength": 1},
         "summary": {"type": "string"},
+        "zero_tests_detected": {
+          "type": "boolean",
+          "description": "true when the test command reported 'Ran 0 tests' — an empty suite never counts as a pass, regardless of the exit code (Python < 3.12 exits 0 on zero collected tests)."
+        },
         "environment": {
           "type": "object",
           "required": ["secrets_scrubbed", "scrubbed_var_count", "scrubbed_var_names", "network", "network_vars_removed"],
