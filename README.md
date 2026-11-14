@@ -81,7 +81,7 @@ not aspirational marketing.
 | Sampled findings verified true positives | **20/20**, zero security FPs | v0.12.0 field notes |
 | MIZAN scanning its own repository | **0 actionable findings** across all scanners | v0.12.1+, strict `--gate` |
 | Field benchmark — 100 real open-source repos (zai-org first, Nov 2026) | **median 1.04 s / repo**, 0 crashes, 0 timeouts | v0.12.2 field wave |
-| Test suite | **662 tests green**, Python 3.10–3.14 | CI, every push |
+| Test suite | **691 tests green**, Python 3.10–3.14 | CI, every push |
 | Trusted CI steps that can hide a failure | **0** (`continue-on-error` removed) | v0.12.1 |
 
 ## Quickstart

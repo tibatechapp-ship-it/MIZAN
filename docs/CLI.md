@@ -1,6 +1,6 @@
 # CLI surface — measured, not claimed
 
-Snapshot of `mizan --help` at 0.15.0-dev (2026-11-10), 22 subcommands.
+Snapshot of `mizan --help` at 0.15.0-dev (2026-11-14), 23 subcommands.
 Purpose strings are verbatim from each command's own `--help` output (or from
 the README table where a command exposes no one-liner). The Network/Token
 columns come from an import audit of the implementing modules: `urllib`
@@ -31,7 +31,33 @@ contract; write-capable flows are explicit, user-driven commands.
 | `import-sarif` | Import an external SARIF 2.1.0 report (Semgrep, Gitleaks, Trivy, Bandit, ...) into MIZAN's normalized finding schema — read-only, provenance preserved, failures are loud | no | no | no (output file only if `--output`) |
 | `merge-findings` | Merge several SARIF reports into grouped findings — link, never erase: every occurrence keeps its tool and evidence | no | no | no (output file only if `--output`) |
 | `triage` | Apply documented review decisions to imported findings — decisions referencing unknown fingerprints are rejected | no | no | no (output file only if `--output`) |
+| `repair-request` | Build a structured `repair-request.v1` handoff for a coding agent — evidence first, no guessing, human review always required | no | no | no (output file only if `--output`) |
 | `portfolio` | Aggregate full-scan results for MULTIPLE repositories into one self-contained HTML report (display layer) | no | no | HTML output |
+
+### `repair-request` — structured handoff to a coding agent (wave 3)
+
+```bash
+mizan analyze src/ --output findings.json
+mizan repair-request findings.json --output requests.json
+```
+
+Builds a `repair-request.v1` batch: for every finding, `finding_id`
+(the stable fingerprint), the evidence (tool, rule, file, line, message,
+`tool_level` verbatim), a review suggestion per rule family,
+constraints, verification steps, `confidence`, and
+`human_review_required=true` — always. MIZAN never writes into the
+user's tree in this wave: the agent works in an isolated branch or
+worktree, presents the diff plus test results, and a human approves the
+merge. `auto_appliable` is always `false`.
+
+Insufficient evidence is refused with exit **2** naming exactly what
+must be measured ("don't guess; explain what is needed to verify") — a
+finding without a usable location, rule identity, or evidence message
+never becomes a request. Inputs: a `mizan.finding.v1` list, an
+`mizan.import.v1` summary, an `mizan.merged.v1` summary, or MIZAN's raw
+analyzer findings (1:1 field adapter, documented). The published JSON
+Schema lives at `docs/schemas/repair-request.v1.json`; a consistency
+test keeps schema and validator from drifting.
 
 ### `merge-findings` and `triage` — link, never erase (wave 1)
 

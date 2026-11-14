@@ -374,6 +374,17 @@ def main(argv=None):
     )
     triage_cmd.add_argument("--output", default=None)
 
+    repair_req_cmd = commands.add_parser(
+        "repair-request",
+        help=(
+            "Build a structured repair-request.v1 handoff for a coding "
+            "agent — evidence first, no guessing, human review always "
+            "required; MIZAN never writes to the user's tree"
+        ),
+    )
+    repair_req_cmd.add_argument("findings", metavar="FINDINGS_JSON")
+    repair_req_cmd.add_argument("--output", default=None)
+
     ledger_cmd = commands.add_parser("ledger")
     ledger_cmd.add_argument("message")
     ledger_cmd.add_argument(
@@ -558,6 +569,59 @@ def main(argv=None):
                 parser.error(str(exc))
             rendered = json.dumps(result, indent=2, ensure_ascii=False)
             save_or_print(rendered, args.output)
+            return 0
+
+        elif args.command == "repair-request":
+            from .integrations.repair_request import (
+                RepairRequestError,
+                write_repair_requests,
+            )
+            try:
+                with open(args.findings, "r", encoding="utf-8") as fh:
+                    payload = json.load(fh)
+            except (OSError, json.JSONDecodeError) as exc:
+                parser.error(
+                    f"Cannot read findings file {args.findings}: {exc}"
+                )
+            if isinstance(payload, dict) and isinstance(
+                payload.get("findings"), list
+            ):
+                findings = payload["findings"]
+            elif isinstance(payload, dict) and isinstance(
+                payload.get("groups"), list
+            ):
+                # mizan.merged.v1: flatten occurrences — the request
+                # carries the same evidence the merge linked.
+                findings = [
+                    occurrence
+                    for group in payload["groups"]
+                    for occurrence in group.get("occurrences", [])
+                ]
+            elif isinstance(payload, list):
+                findings = payload
+            else:
+                parser.error(
+                    f"{args.findings} must be a findings list, a "
+                    "mizan.import.v1 summary, or a mizan.merged.v1 "
+                    "summary"
+                )
+            try:
+                result = write_repair_requests(findings, args.output)
+            except RepairRequestError as exc:
+                # Exit contract: 2 = incomplete — insufficient evidence
+                # is refused with what must be measured, never guessed.
+                parser.error(str(exc))
+            if args.output is None:
+                rendered = json.dumps(
+                    result, indent=2, ensure_ascii=False
+                )
+                save_or_print(rendered, None)
+            else:
+                print(
+                    f"wrote {result['count']} repair request(s) to "
+                    f"{args.output} — human review required before any "
+                    f"merge"
+                )
             return 0
 
         elif args.command == "inspect":
