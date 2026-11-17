@@ -1,21 +1,135 @@
 {
   "schema": "mizan-baseline/1",
   "tool": "MIZAN Security",
-  "version": "0.12.3",
-  "created_at": "2026-11-07T20:25:49Z",
-  "count": 24,
-  "note": "v0.12.3 wave — post-fix regen",
+  "version": "0.17.0-dev",
+  "created_at": "2026-11-17T01:56:46Z",
+  "count": 43,
+  "note": "v0.17.0-dev wave-2 post-fix regen (2026-11-17): conscious accepts = bind-all self-rule literal + doc-reference resolver FP (measure_rule_accuracy lives in tests/); change-risk entries are this wave's by-design signals",
   "fingerprints": {
-    "c69baa420d342498": {
-      "rule": "critical-component-changed",
-      "file": "package.json",
-      "line": 0,
-      "severity": "high"
+    "81146e0d4338384b": {
+      "rule": "hardcoded-bind-all-interfaces",
+      "file": "src/mizan/analyzer.py",
+      "line": 200,
+      "severity": "medium"
+    },
+    "ba634b6c09108068": {
+      "rule": "hardcoded-tmp-path",
+      "file": "src/mizan/analyzer.py",
+      "line": 1256,
+      "severity": "low"
+    },
+    "97f516375d578500": {
+      "rule": "hardcoded-tmp-path",
+      "file": "src/mizan/analyzer.py",
+      "line": 1257,
+      "severity": "low"
+    },
+    "fba4f24780447624": {
+      "rule": "doc-missing-docstring",
+      "file": "scripts/run_semgrep_reference.py",
+      "line": 36,
+      "severity": "info"
+    },
+    "4474eed236f7579d": {
+      "rule": "doc-missing-docstring",
+      "file": "scripts/run_semgrep_reference.py",
+      "line": 40,
+      "severity": "info"
+    },
+    "a649cdfba4eca22f": {
+      "rule": "doc-missing-docstring",
+      "file": "scripts/run_semgrep_reference.py",
+      "line": 84,
+      "severity": "info"
+    },
+    "7440c1c993248141": {
+      "rule": "doc-missing-docstring",
+      "file": "scripts/verify_all_tags.py",
+      "line": 31,
+      "severity": "info"
+    },
+    "722380b1b261f5fe": {
+      "rule": "doc-missing-docstring",
+      "file": "scripts/verify_all_tags.py",
+      "line": 35,
+      "severity": "info"
+    },
+    "3cadc75ec330bd75": {
+      "rule": "doc-missing-docstring",
+      "file": "scripts/verify_all_tags.py",
+      "line": 42,
+      "severity": "info"
+    },
+    "bc8d1930e1e689f1": {
+      "rule": "doc-missing-docstring",
+      "file": "scripts/verify_all_tags.py",
+      "line": 54,
+      "severity": "info"
+    },
+    "99daad4a2501807f": {
+      "rule": "doc-missing-docstring",
+      "file": "scripts/verify_all_tags.py",
+      "line": 67,
+      "severity": "info"
     },
     "682dee27cbf96bcc": {
       "rule": "doc-missing-docstring",
       "file": "src/mizan/portfolio.py",
       "line": 367,
+      "severity": "info"
+    },
+    "7dae5bc19cdcf3c8": {
+      "rule": "doc-missing-docstring",
+      "file": "src/mizan/report/cli.py",
+      "line": 73,
+      "severity": "info"
+    },
+    "121d54067212fa6e": {
+      "rule": "doc-missing-docstring",
+      "file": "src/mizan/report/cli.py",
+      "line": 133,
+      "severity": "info"
+    },
+    "fdbe9aea9d8ea962": {
+      "rule": "doc-missing-docstring",
+      "file": "src/mizan/report/cli.py",
+      "line": 141,
+      "severity": "info"
+    },
+    "d696fdc605a4e262": {
+      "rule": "doc-missing-docstring",
+      "file": "src/mizan/report/cli.py",
+      "line": 169,
+      "severity": "info"
+    },
+    "152648bb1f1ca0f0": {
+      "rule": "doc-missing-docstring",
+      "file": "src/mizan/report/cli.py",
+      "line": 216,
+      "severity": "info"
+    },
+    "dcaafa7b389c8a43": {
+      "rule": "doc-missing-docstring",
+      "file": "src/mizan/report/cwe.py",
+      "line": 38,
+      "severity": "info"
+    },
+    "baee46e39d6b5b5b": {
+      "rule": "doc-missing-docstring",
+      "file": "src/mizan/report/timeline.py",
+      "line": 61,
+      "severity": "info"
+    },
+    "13137abde23b8a19": {
+      "rule": "doc-needs-review",
+      "file": "docs/ARCHITECTURE.md",
+      "line": 20,
+      "severity": "info"
+    },
+    "68439bb5d3bc17bf": {
+      "rule": "doc-needs-review",
+      "file": "docs/REVIEW_2026-11-10.md",
+      "line": 9,
       "severity": "info"
     },
     "dd158aa523a7aa35": {
@@ -30,15 +144,15 @@
       "line": 0,
       "severity": "info"
     },
-    "9e056e10bb1dba8b": {
+    "0e068498e365f75c": {
       "rule": "doc-orphan-code",
-      "file": "src/mizan/ai_fixer.py",
+      "file": "scripts/run_semgrep_reference.py",
       "line": 0,
       "severity": "info"
     },
-    "0e918d969fb8c0d4": {
+    "9e056e10bb1dba8b": {
       "rule": "doc-orphan-code",
-      "file": "src/mizan/analyzer.py",
+      "file": "src/mizan/ai_fixer.py",
       "line": 0,
       "severity": "info"
     },
@@ -96,12 +210,6 @@
       "line": 0,
       "severity": "info"
     },
-    "57a298d52e57f4b7": {
-      "rule": "doc-orphan-code",
-      "file": "src/mizan/gate.py",
-      "line": 0,
-      "severity": "info"
-    },
     "fb191e7c2ae76db2": {
       "rule": "doc-orphan-code",
       "file": "src/mizan/git_scanner.py",
@@ -126,28 +234,34 @@
       "line": 0,
       "severity": "info"
     },
+    "93f8580f4d676d98": {
+      "rule": "doc-orphan-code",
+      "file": "src/mizan/remote_scan.py",
+      "line": 0,
+      "severity": "info"
+    },
     "317beb3bc2bde3cb": {
       "rule": "doc-orphan-code",
       "file": "src/mizan/repair.py",
       "line": 0,
       "severity": "info"
     },
-    "e55d36015740e716": {
+    "22308d8e45f19c14": {
       "rule": "doc-orphan-code",
-      "file": "src/mizan/risk_scanner.py",
+      "file": "src/mizan/report/cli.py",
       "line": 0,
       "severity": "info"
     },
-    "d01c2d45fe4e84aa": {
+    "1ebd4197450500d0": {
       "rule": "doc-stale-reference",
       "file": "CHANGELOG.md",
-      "line": 21,
+      "line": 148,
       "severity": "medium"
     },
-    "54ebe12a32590959": {
+    "a39ae4781b951658": {
       "rule": "doc-stale-reference",
-      "file": "CHANGELOG.md",
-      "line": 22,
+      "file": "docs/MEASUREMENT.md",
+      "line": 42,
       "severity": "medium"
     }
   }
