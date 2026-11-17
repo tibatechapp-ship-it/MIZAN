@@ -130,6 +130,24 @@ patch introduced, the tests that ran and their output tail, the
 scrubbed variables by name, and the declared isolation limits — what
 is enforced and what only declared, never oversold.
 
+**Isolation is NOT a sandbox (E-05, 2026-11-17 review).** `verify-repair`
+gives you a temporary git worktree plus an environment scrub — that is
+its whole isolation surface, and the module says so itself. The code
+under test still executes on your machine as your user: with
+`--allow-network` it can open arbitrary network connections, and even
+without it it can reach local files, sockets, and resources available
+to the runner user. Never present `verify-repair` as "sandboxed" or
+"fully isolated". For hard isolation, run the whole command inside a
+container with explicit network, CPU, memory, and time limits — for
+example:
+
+```bash
+docker run --rm --network none --cpus 2 --memory 1g \
+  --pids-limit 128 --read-only --tmpfs /tmp \
+  -v "$PWD:/src:rw" -w /src \
+  mizan-image mizan verify-repair request.json
+```
+
 Exit contract: **0** = the patch verified (finding gone, no new
 findings, tests passed); **1** = verification measured a failure —
 stated in the report, never silent (a timed-out or empty test run

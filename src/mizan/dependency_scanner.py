@@ -74,6 +74,37 @@ def _pypi_records(path, records):
     return [dict(record, ecosystem="PyPI", scope=scope) for record in records]
 
 
+def _poetry_record(package, constraint, scope, section):
+    """Build a record from a Poetry dependency entry.
+
+    Poetry constraints are either a plain string (``"^3.10"``) or a table
+    (``{version = "2.0", extras = ["socks"], python = ">=3.8"}``). The
+    table form is normalized: the version becomes the constraint and the
+    declared extras are folded into the package name
+    (``requests[socks]``) so OSV can still resolve the package, while
+    non-package keys (``python``, ``optional``, ``markers``) are ignored.
+    """
+    if isinstance(constraint, dict):
+        extras = constraint.get("extras") or []
+        name = package + ("[" + ",".join(extras) + "]" if extras else "")
+        return {
+            "name": name,
+            "constraint": str(constraint.get("version", "*")),
+            "source": "pyproject.toml",
+            "ecosystem": "PyPI",
+            "scope": scope,
+            "section": section,
+        }
+    return {
+        "name": package,
+        "constraint": str(constraint),
+        "source": "pyproject.toml",
+        "ecosystem": "PyPI",
+        "scope": scope,
+        "section": section,
+    }
+
+
 def parse_manifest(path):
     """Parse a dependency manifest into dependency records."""
     name = path.name
@@ -109,21 +140,84 @@ def parse_manifest(path):
         data = tomllib.loads(
             path.read_text(encoding="utf-8")
         )
-        dependencies = data.get("project", {}).get(
-            "dependencies", []
-        )
+        # E-03 (2026-11-17 review): the previous parser read ONLY
+        # `project.dependencies`, silently skipping every other dependency
+        # declaration the file can legally carry — PEP 621 optional
+        # dependencies (extras), PEP 735 dependency groups, and the two
+        # Poetry forms. A missing extra that ships a known-vulnerable
+        # package must not become a clean "no dependencies" report, so all
+        # documented sections are now collected, each with a deterministic
+        # scope.
+        result = []
 
-        return [
-            {
-                "name": item.split(";")[0].split("[")[0].split("<")[0]
+        def _requirement_record(item, scope, section):
+            req = str(item).strip()
+            return {
+                "name": req.split(";")[0].split("[")[0].split("<")[0]
                     .split(">")[0].split("=")[0].strip(),
-                "constraint": item,
+                "constraint": req,
                 "source": name,
                 "ecosystem": "PyPI",
-                "scope": "runtime",
+                "scope": scope,
+                "section": section,
             }
-            for item in dependencies
-        ]
+
+        project = data.get("project", {})
+        for item in project.get("dependencies", []) or []:
+            result.append(_requirement_record(item, "runtime",
+                                              "project.dependencies"))
+
+        # PEP 621 extras: installed whenever the consumer asks for the
+        # extra, so they are runtime-scoped (a dev-only extra is still a
+        # real, installable dependency — the deterministic rule is
+        # documented, not a guess about intent).
+        for extra, reqs in (project.get("optional-dependencies", {}) or {}
+                            ).items():
+            for item in reqs or []:
+                record = _requirement_record(
+                    item, "runtime", f"project.optional-dependencies.{extra}")
+                result.append(record)
+
+        # PEP 735 dependency groups: declared for development workflows,
+        # deterministic dev scope (same rule as requirements-dev.txt and
+        # package.json devDependencies).
+        for group, reqs in (data.get("dependency-groups", {}) or {}
+                            ).items():
+            for item in reqs or []:
+                record = _requirement_record(
+                    item, "dev", f"dependency-groups.{group}")
+                result.append(record)
+
+        poetry = (data.get("tool", {}).get("poetry", {}) or {})
+        for item in poetry.get("dependencies", {}) or {}:
+            if item == "python":
+                continue  # language constraint, not a package
+            record = _poetry_record(item, poetry["dependencies"][item],
+                                    "runtime", "tool.poetry.dependencies")
+            result.append(record)
+        # Legacy Poetry dev section (pre-1.2 style).
+        for item in poetry.get("dev-dependencies", {}) or {}:
+            if item == "python":
+                continue
+            record = _poetry_record(item, poetry["dev-dependencies"][item],
+                                    "dev", "tool.poetry.dev-dependencies")
+            result.append(record)
+        # Poetry 1.2+ group form; dev/test/docs/lint groups are
+        # deterministically dev-scoped, everything else runtime.
+        poetry_groups = poetry.get("group", {}) or {}
+        dev_group_names = {"dev", "test", "docs", "lint"}
+        for group_name, group_def in poetry_groups.items():
+            deps = (group_def or {}).get("dependencies", {}) or {}
+            for item in deps:
+                if item == "python":
+                    continue
+                record = _poetry_record(
+                    item, deps[item],
+                    "dev" if group_name in dev_group_names else "runtime",
+                    f"tool.poetry.group.{group_name}.dependencies")
+                result.append(record)
+
+        return result
 
     if name == "Cargo.toml":
         data = tomllib.loads(path.read_text(encoding="utf-8"))

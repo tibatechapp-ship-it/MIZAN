@@ -48,6 +48,14 @@ inputs:
     description: 'Comma-separated bot authors allowed to be auto-approved'
     required: false
     default: 'dependabot[bot],renovate[bot],github-actions[bot]'
+  fail-on-fix-error:
+    description: 'Fail the workflow when mizan fix errors (default: false, but the failure is ALWAYS surfaced as an ::error and the fix-status output reports it — it is never silently swallowed)'
+    required: false
+    default: 'false'
+  fail-on-pr-error:
+    description: 'Fail the workflow when creating the fix PR errors (default: false, but the failure is ALWAYS surfaced as an ::error and the pr-status output reports it — it is never silently swallowed)'
+    required: false
+    default: 'false'
 
 outputs:
   findings-count:
@@ -56,6 +64,15 @@ outputs:
   sarif-file:
     description: 'Absolute path to the SARIF file'
     value: ${{ steps.scan.outputs.sarif-file }}
+  fix-status:
+    description: 'Outcome of the fix step: skipped | no-changes | applied | failed'
+    value: ${{ steps.fix.outputs.fix-status }}
+  pr-status:
+    description: 'Outcome of the PR step: skipped | no-changes | created | failed'
+    value: ${{ steps.pr.outputs.pr-status }}
+  pr-url:
+    description: 'URL of the created PR (empty when pr-status is not created)'
+    value: ${{ steps.pr.outputs.pr-url }}
 
 runs:
   using: 'composite'
@@ -113,42 +130,79 @@ runs:
         sarif_file: ${{ inputs.sarif-output }}
         category: mizan
 
+    # E-01 (2026-11-17 review): a failed fix is NEVER silently swallowed.
+    # The failure is always surfaced as an ::error and reported through the
+    # fix-status output; fail-on-fix-error decides whether it also breaks
+    # the workflow. No default path reports success without saying what
+    # actually happened.
     - name: Apply fixes (local only)
+      id: fix
       if: inputs.auto-fix == 'true' && steps.scan.outputs.findings-count != '0'
       shell: bash
       env:
         FIX_PATH: ${{ inputs.path }}
+        FAIL_ON_FIX_ERROR: ${{ inputs.fail-on-fix-error }}
       run: |
         echo "::group::MIZAN fix --apply"
-        mizan fix "$FIX_PATH" --apply || echo "::warning::MIZAN fix encountered an issue"
+        set +e
+        mizan fix "$FIX_PATH" --apply
+        RC=$?
+        set -e
         echo "::endgroup::"
         git diff --stat || true
+        if [ "$RC" -ne 0 ]; then
+          echo "fix-status=failed" >> "$GITHUB_OUTPUT"
+          echo "::error::MIZAN fix FAILED (exit $RC) — the fix was NOT applied reliably. fix-status=failed"
+          [ "$FAIL_ON_FIX_ERROR" = "true" ] && exit 1
+          exit 0
+        fi
+        if [ -z "$(git status --porcelain)" ]; then
+          echo "fix-status=no-changes" >> "$GITHUB_OUTPUT"
+          echo "::notice::MIZAN fix completed without file changes"
+        else
+          echo "fix-status=applied" >> "$GITHUB_OUTPUT"
+        fi
 
+    # E-01 (2026-11-17 review): a failed PR creation is NEVER silently
+    # converted into success. pr-status reports created | failed | skipped
+    # | no-changes, failures emit ::error, and fail-on-pr-error decides
+    # whether the workflow also fails. Downstream steps can gate on
+    # pr-status instead of guessing.
     - name: Create Pull Request with fixes
+      id: pr
       if: inputs.create-pr == 'true' && steps.scan.outputs.findings-count != '0'
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
         PR_FINDINGS: ${{ steps.scan.outputs.findings-count }}
+        FAIL_ON_PR_ERROR: ${{ inputs.fail-on-pr-error }}
         EVENT_BASE_REF: ${{ github.event.pull_request.base.ref }}
         REPO_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
       run: |
+        fail_pr() {
+          echo "pr-status=failed" >> "$GITHUB_OUTPUT"
+          echo "::error::MIZAN fix-PR step FAILED: $1 — pr-status=failed, no PR was created"
+          [ "$FAIL_ON_PR_ERROR" = "true" ] && exit 1
+          exit 0
+        }
         if [ -z "$(git status --porcelain)" ]; then
+          echo "pr-status=no-changes" >> "$GITHUB_OUTPUT"
           echo "::notice::No file changes to commit"
           exit 0
         fi
         BRANCH="mizan/auto-fix-$(date +%Y%m%d-%H%M%S)"
         git config user.name "MIZAN Bot"
         git config user.email "mizan-bot@users.noreply.github.com"
-        git checkout -b "$BRANCH"
+        git checkout -b "$BRANCH" || fail_pr "could not create branch $BRANCH"
         git add -A
         git reset -- '*.sarif' 2>/dev/null || true
         if [ -z "$(git diff --cached --name-only)" ]; then
+          echo "pr-status=no-changes" >> "$GITHUB_OUTPUT"
           echo "::notice::No committable changes after excluding SARIF"
           exit 0
         fi
-        git commit -m "fix(deps): auto-fix $PR_FINDINGS vulnerabilities via MIZAN"
-        git push -u origin "$BRANCH"
+        git commit -m "fix(deps): auto-fix $PR_FINDINGS vulnerabilities via MIZAN" || fail_pr "git commit failed"
+        git push -u origin "$BRANCH" || fail_pr "git push failed"
         BASE_BRANCH="$EVENT_BASE_REF"
         [ -z "$BASE_BRANCH" ] && BASE_BRANCH="$REPO_DEFAULT_BRANCH"
         [ -z "$BASE_BRANCH" ] && BASE_BRANCH="main"
@@ -157,10 +211,9 @@ runs:
           --title "fix(deps): MIZAN auto-fix ($PR_FINDINGS vulnerabilities)" \
           --body "MIZAN detected $PR_FINDINGS dependency vulnerabilities and applied safe fixes. See the Security tab for the full SARIF report." \
           --base "$BASE_BRANCH" \
-          --head "$BRANCH" 2>&1) || {
-            echo "::warning::gh pr create failed: $PR_URL"
-            exit 0
-          }
+          --head "$BRANCH" 2>&1) || fail_pr "gh pr create failed: $PR_URL"
+        echo "pr-status=created" >> "$GITHUB_OUTPUT"
+        echo "pr-url=$PR_URL" >> "$GITHUB_OUTPUT"
         echo "::notice::Created PR: $PR_URL"
         for L in mizan security dependencies; do
           gh pr edit "$PR_URL" --add-label "$L" 2>/dev/null || true

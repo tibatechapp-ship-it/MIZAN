@@ -101,7 +101,7 @@ python3 scripts/run_semgrep_reference.py
   كل واحدة بموقعها البادئ نسبيًا وبصمتها الثابتة، و`tool_level` كما
   أرسلته الأداة (بلا خواص شدة → `unknown` حرفيًا في العقد).
 - **قراءة صادقة للنتيجة**: قاعدة Semgrep المحلية أطلقت على عينة سالبة
-  (`negative/hardcoded-secret-candidate/03_placeholder_value.py` — قيمة
+  (`tests/rules/fixtures/negative/hardcoded-secret-candidate/03_placeholder_value.py` — قيمة
   مؤقتة/موضع قيمة) بينما عقد MIZAN على نفس العينة **صامت بالقياس**؛
   هذا مقصود في العرض: نتائج الأدوات الخارجية تُستورد **كما هي** مع
   مصدرها وتراجَع عبر بوابة الموجة 1 (`triage`)، وتبقى أرقام دقة

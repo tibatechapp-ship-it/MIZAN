@@ -24,8 +24,8 @@ GitHub Actions داخل الـ workflow — ولو منح `pages: write` — ل�
 
 استخدم GitHub CLI مرة واحدة: `gh auth login` (تدفق الجهاز: يظهر كود
 لمرة واحدة تُدخله في github.com/login/device) — يُخزَّن التوكن في
-`~/.config/gh/hosts.yml` محلياً ويمرره `gh` تلقائياً لكل استدعاء
-(`gh api`، وgit push عبر `gh auth setup-git`). لا تلصق توكن في
+تخزين `gh` المحلي على جهازك (خارج هذا المستودع) ويمرره `gh` تلقائياً
+لكل استدعاء (`gh api`، وgit push عبر `gh auth setup-git`). لا تلصق توكن في
 المحادثة ولا تكتبه في أي ملف؛ إن لُصق بالخطأ فأبطِله فوراً من
 github.com/settings/tokens. القاعدة الحاكمة للمشروع: التوكن من البيئة
 أو من `gh` حصراً، ولا يُطبع في أي مخرج.

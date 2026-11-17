@@ -172,15 +172,17 @@ MIZAN self-scan = **25 targets / 3,997 files**.
   coverage is the acceptance suite, and their FP status on the sample is
   measured-zero by absence.
 
-Gate artifacts: `fp_gate_wave2_v0150dev/gate_rows.json` (workspace).
+Gate artifacts: `gate_rows.json` from the wave-2 FP-gate workspace
+(a transient run directory, recorded here by name only — not part of
+the repository).
 Test suite at time of writing: **596 tests green** (same CI command).
 
 ## Wave 3 — status table (2026-11-11)
 
 Per the update cycle: severity/confidence and exact semantics
 re-verified from the per-check pages AND the plugin sources verbatim
-(`bandit/plugins/weak_cryptographic_key.py`, `trojansource.py`) before
-each recorded decision.
+(`weak_cryptographic_key.py` and `trojansource.py` inside Bandit's own
+repository) before each recorded decision.
 
 | Bandit | MIZAN rule | Severity | Status | Rationale | Updated |
 |---|---|---|---|---|---|
@@ -239,10 +241,10 @@ local repo copies + `tawteen` + MIZAN self-scan = **25 targets**.
 
 - **8 hits, 8/8 hand-checked — 0 structural false positives, 8
   context-dependent**: 6× invisible-char-stripping regexes in
-  `ai-job-search` TypeScript CLIs (`.agents/skills/*/cli/src/helpers.ts`
-  — an `INVISIBLE_CHARS` sanitizer; the source comments describe the
-  intent) + `BIDI`/`BIDI_TAMPER` constants in the same repo's
-  `tools/posting_guard.py` (an explicit bidi-tamper guard). All eight
+  external `ai-job-search` TypeScript CLIs (an `INVISIBLE_CHARS`
+  sanitizer in their CLI helpers — the source comments describe the
+  intent) + `BIDI`/`BIDI_TAMPER` constants in that repo's
+  `posting_guard.py` (an explicit bidi-tamper guard). All eight
   are DEFENSIVE definitions of the same character set — the legitimate
   mirror of the rule; classified like the wave-1 self-scan hits
   (context-dependent, review lead, non-blocking). Bandit itself would
@@ -253,7 +255,9 @@ local repo copies + `tawteen` + MIZAN self-scan = **25 targets**.
 - `tawteen` (Arabic package): 0 hits — the RLM-in-Arabic-strings FP
   class did not occur in the sample.
 
-Gate artifacts: `fp_gate_wave3_v0150dev/gate_rows.json` (workspace).
+Gate artifacts: `gate_rows.json` from the wave-3 FP-gate workspace
+(a transient run directory, recorded here by name only — not part of
+the repository).
 Test suite at time of writing: **603 tests green** (same CI command:
 `python -m unittest discover -s tests`).
 
@@ -320,7 +324,8 @@ in `tests/test_bandit_parity.py`), same CI command
 ## Applying the same pattern to other upstream tools
 
 This tracker is the template for every tool MIZAN draws detection semantics
-from: `docs/<TOOL>_PARITY.md` with the same adopt/reject/defer contract, a
+from: a `PARITY` page per tool under `docs/`, following the same
+adopt/reject/defer contract, a
 precision filter, documented deviations, and a dated review session per
 upstream release. Dependence on others becomes documented benefit — without
 losing sovereignty over MIZAN's own rule set.

@@ -8,8 +8,9 @@
 
 | الإصدار | مدعوم |
 |---|---|
-| 0.8.x+ | ✅ نعم |
-| < 0.8.0 | ❌ لا — يُنصح بالترقية فوراً (إصلاح أمني حرج في 0.3.0، تقوية في 0.7.0، وإصلاح البوابة في 0.8.1) |
+| 0.16.x | ✅ نعم — الإصدار المستقر الحالي، يستقبل إصلاحات أمنية |
+| 0.9.x – 0.15.x | ⚠️ دعم بجهود أفضل — الإصلاحات تُنشر في الإصدار المستقر الأخير، ويُنصح بالترقية |
+| < 0.9.0 | ❌ لا — يُنصح بالترقية فوراً (إصلاح أمني حرج في 0.3.0، تقوية في 0.7.0، وإصلاح البوابة في 0.8.1) |
 
 ## كيف تُبلّغ عن ثغرة؟ | Reporting a Vulnerability
 
@@ -53,8 +54,9 @@
 
 | Version | Supported |
 |---|---|
-| 0.8.x+ | ✅ Yes |
-| < 0.8.0 | ❌ No — upgrade immediately (0.3.0 ships a critical CI fix, 0.7.0 completes the hardening wave, 0.8.1 fixes the bare gate flag) |
+| 0.16.x | ✅ Yes — current stable release, receives security fixes |
+| 0.9.x – 0.15.x | ⚠️ Best-effort — fixes land in the latest stable, upgrade recommended |
+| < 0.9.0 | ❌ No — upgrade immediately (0.3.0 ships a critical CI fix, 0.7.0 completes the hardening wave, 0.8.1 fixes the bare gate flag) |
 
 ## Reporting
 

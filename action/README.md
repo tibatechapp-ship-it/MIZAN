@@ -26,7 +26,7 @@ jobs:
       # the full commit SHA instead so the code you run can never change
       # under your feet:
       #   uses: tibatechapp-ship-it/MIZAN/action@<full-commit-sha>
-      - uses: tibatechapp-ship-it/MIZAN/action@v0.9.0
+      - uses: tibatechapp-ship-it/MIZAN/action@v0.16.0
         with:
           fail-on-findings: "true"
 ```
@@ -61,6 +61,21 @@ PRs authored by anyone outside `approve-allowed-authors` or touching
 | merge-prs | false | Auto-merge after approval (implies approve-prs) |
 | approve-exclude-paths | .github/,Dockerfile,.env,... | Paths that block auto-approval |
 | approve-allowed-authors | dependabot[bot],renovate[bot],... | Bot authors eligible for auto-approval |
+| fail-on-fix-error | false | Exit 1 when `mizan fix` errors — the failure is **always** surfaced as an `::error` and the `fix-status` output reports it; this input only decides whether it also fails the workflow |
+| fail-on-pr-error | false | Exit 1 when creating the fix PR errors — the failure is **always** surfaced as an `::error` and the `pr-status` output reports it; this input only decides whether it also fails the workflow |
+
+## Outputs
+
+| Output | Description |
+|-------|-------------|
+| findings-count | Number of vulnerabilities found |
+| sarif-file | Absolute path to the SARIF file |
+| fix-status | `skipped` \| `no-changes` \| `applied` \| `failed` |
+| pr-status | `skipped` \| `no-changes` \| `created` \| `failed` |
+| pr-url | URL of the created PR (empty unless `pr-status` is `created`) |
+
+Gate downstream steps on `fix-status` / `pr-status` instead of guessing:
+never assume a green workflow means the fix was applied or the PR exists.
 
 ## Failure semantics (RW-205)
 
@@ -75,6 +90,19 @@ report"**:
 
 A missing or malformed SARIF file also fails the step instead of counting
 as zero findings.
+
+## Fix and PR failure semantics (E-01, 2026-11-17 review)
+
+The optional fix/PR paths follow the same "explicit, never silent" rule:
+
+| Situation | Always happens | `fail-on-*-error: false` | `fail-on-*-error: true` |
+|---|---|---|---|
+| `mizan fix` exits non-zero | `::error` + `fix-status=failed` | workflow continues | workflow fails |
+| `git commit` / `git push` / `gh pr create` fails | `::error` + `pr-status=failed` | workflow continues | workflow fails |
+
+There is no code path where a failed fix or a missing PR looks like an
+unqualified success — the status outputs and `::error` annotations are
+emitted in every case; the inputs only control hard failure.
 
 ## Security
 

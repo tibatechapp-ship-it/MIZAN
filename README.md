@@ -81,8 +81,36 @@ not aspirational marketing.
 | Sampled findings verified true positives | **20/20**, zero security FPs | v0.12.0 field notes |
 | MIZAN scanning its own repository | **0 actionable findings** across all scanners | v0.12.1+, strict `--gate` |
 | Field benchmark — 100 real open-source repos (zai-org first, Nov 2026) | **median 1.04 s / repo**, 0 crashes, 0 timeouts | v0.12.2 field wave |
-| Test suite | **742 tests green**, Python 3.10–3.14 | CI, every push |
+| Test suite | **755 tests green**, Python 3.10–3.14 | CI, every push |
 | Trusted CI steps that can hide a failure | **0** (`continue-on-error` removed) | v0.12.1 |
+
+## Measured accuracy — scope and limits (E-02, 2026-11-17 review)
+
+Numbers mean different things at different scopes. What MIZAN publishes
+is separated below so a corpus result is never mistaken for a blanket
+field guarantee:
+
+- **Frozen golden corpus** — 20 security rules × (5 positive + 5
+  negative) + 16 edge cases: **precision 100/100, recall 100/100**
+  (`docs/MEASUREMENT.md`, deterministic counter, enforced by CI). This
+  is performance on a fixed, versioned sample set — it proves the rules
+  behave as designed on that corpus, nothing more.
+- **Field evidence** — 20 real repositories: **−93.6% false positives**
+  vs the prior wave (v0.9.0) and 20/20 sampled findings verified true
+  positives (v0.12.0); a 100-repo field benchmark (median 1.04 s/repo,
+  0 crashes, 0 timeouts — v0.12.2) measured stability, not accuracy.
+- **Not yet measured** — Python is the only language with a golden
+  corpus; **JS/TS and other language rules have no equivalent published
+  precision/recall numbers yet** (roadmap item). Do not extrapolate the
+  100/100 to those languages or to arbitrary repositories.
+
+`verify-repair` isolation wording, kept deliberately precise: a repair
+verification runs in a **temporary git worktree with a secret-stripped
+environment** — it is **not a container sandbox**. Test code executes as
+the invoking user and can reach local resources; network is off by
+default only by proxy/variable scrubbing (`--allow-network` restores
+it). For hard isolation run it inside a container with explicit network,
+CPU, and memory limits (recipe in `docs/CLI.md`).
 
 ## Quickstart
 
