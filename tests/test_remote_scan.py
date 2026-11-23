@@ -313,7 +313,7 @@ class TarballRequestTests(unittest.TestCase):
                 return self._data if amount is None else self._data[:amount]
 
         class Connection:
-            def __init__(self, host, timeout=None):
+            def __init__(self, host, timeout=None, context=None):
                 self.host = host
 
             def request(self, method, path, headers=None):
@@ -353,7 +353,7 @@ class TarballRequestTests(unittest.TestCase):
                 return b""
 
         class Connection:
-            def __init__(self, host, timeout=None):
+            def __init__(self, host, timeout=None, context=None):
                 self.host = host
 
             def request(self, method, path, headers=None):
