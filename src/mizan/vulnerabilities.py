@@ -36,7 +36,7 @@ _OSV_RETRY_SLEEP = 0.6
 
 CACHE_DIR = ".mizan"
 CACHE_FILE = "osv-cache.json"
-CACHE_VERSION = 1
+CACHE_VERSION = 2
 DEFAULT_CACHE_TTL = 24 * 3600
 
 _PIN_RE = re.compile(r"^([A-Za-z0-9][A-Za-z0-9_.-]*)\s*==\s*([^\s;#]+)")
@@ -66,7 +66,7 @@ def _cache_key(ecosystem, name, version):
     raw = f"{ecosystem}|{name}|{version}"
     # Non-security use: local OSV cache filename only. usedforsecurity=False
     # documents that intent and is honored by MIZAN's own weak-crypto rule.
-    return hashlib.sha1(raw.encode("utf-8"), usedforsecurity=False).hexdigest()
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 def _cache_load():
@@ -125,6 +125,7 @@ def _post_json(url, payload):
         headers={"Content-Type": "application/json"},
         method="POST",
     )
+    # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected -- fixed HTTPS OSV_API_URL; package identifiers are JSON body fields, not URL components.
     with urllib.request.urlopen(req, timeout=OSV_TIMEOUT) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
