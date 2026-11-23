@@ -49,13 +49,13 @@ unchanged; ``scan-remote`` reuses ``scan_repository`` on the extracted tree.
 """
 
 import io
+import http.client
 import os
 import posixpath
 import re
 import shutil
 import tarfile
 import tempfile
-from urllib.parse import quote, urlsplit
 from urllib.parse import quote, urlsplit
 
 __all__ = [
