@@ -107,14 +107,15 @@ class OsvClientTests(unittest.TestCase):
         with self.assertRaises(OsvScanError):
             check_vulnerabilities("requests", "2.0.0", "PyPI")
 
-    @patch("mizan.vulnerabilities.urllib.request.urlopen")
+    @patch("mizan.vulnerabilities.http.client.HTTPSConnection")
     def test_returns_vulns_on_success(self, mock_urlopen):
         os.environ.pop("MIZAN_DISABLE_OSV", None)
         resp = MagicMock()
         resp.read.return_value = json.dumps({
             "vulns": [{"id": "GHSA-xxxx", "summary": "Test"}],
         }).encode("utf-8")
-        mock_urlopen.return_value.__enter__.return_value = resp
+        resp.status = 200
+        mock_urlopen.return_value.getresponse.return_value = resp
         result = check_vulnerabilities("requests", "2.0.0", "PyPI")
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["id"], "GHSA-xxxx")
