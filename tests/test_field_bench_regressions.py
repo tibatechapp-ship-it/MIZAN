@@ -53,7 +53,7 @@ class ChunkingTests(unittest.TestCase):
         state = {"n": 0}
 
         class Connection:
-            def __init__(self, host, timeout=None):
+            def __init__(self, host, timeout=None, context=None):
                 if host != "api.osv.dev":
                     raise AssertionError(f"unexpected host {host}")
                 self.path = ""
@@ -125,7 +125,7 @@ class ChunkingTests(unittest.TestCase):
         calls, sizes = [], []
 
         class Connection:
-            def __init__(self, host, timeout=None):
+            def __init__(self, host, timeout=None, context=None):
                 if host != "api.osv.dev":
                     raise AssertionError(f"unexpected host {host}")
                 self.path = ""
