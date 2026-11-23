@@ -49,15 +49,17 @@ OSV_LODASH_4_17_0 = {
 
 
 def _mock_osv(vulns):
-    """Context manager: patch urlopen to return given vulns."""
-    def factory(*args, **kwargs):
-        cm = MagicMock()
-        resp = MagicMock()
-        resp.read.return_value = json.dumps({"vulns": vulns}).encode()
-        cm.__enter__.return_value = resp
-        cm.__exit__.return_value = False
-        return cm
-    return patch("mizan.vulnerabilities.urllib.request.urlopen", side_effect=factory)
+    """Context manager: patch the pinned OSV HTTPS client."""
+    def factory(host, timeout=None):
+        if host != "api.osv.dev":
+            raise AssertionError(f"unexpected host {host}")
+        connection = MagicMock()
+        response = MagicMock()
+        response.status = 200
+        response.read.return_value = json.dumps({"vulns": vulns}).encode()
+        connection.getresponse.return_value = response
+        return connection
+    return patch("mizan.vulnerabilities.http.client.HTTPSConnection", side_effect=factory)
 
 
 def _write_requirements(root, content):
@@ -239,11 +241,10 @@ class ScaHonestyBenchmark(unittest.TestCase):
         with self.assertRaises(OsvScanError):
             check_vulnerabilities("requests", "2.0.0", "PyPI")
 
-    @patch("mizan.vulnerabilities.urllib.request.urlopen")
+    @patch("mizan.vulnerabilities.http.client.HTTPSConnection")
     def test_12_osv_network_error_raises(self, mock_urlopen):
         """BM-12: network error -> OsvScanError (not [])."""
-        import urllib.error
-        mock_urlopen.side_effect = urllib.error.URLError("network down")
+        mock_urlopen.side_effect = OSError("network down")
         with self.assertRaises(OsvScanError):
             check_vulnerabilities("requests", "2.0.0", "PyPI")
 
