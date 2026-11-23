@@ -12,12 +12,12 @@ Q1 performance hardening (P1):
 """
 
 import hashlib
+import http.client
 import json
 import os
 import re
 import time
-import urllib.error
-import urllib.request
+from urllib.parse import urlsplit
 
 from mizan.detector import (
     iter_locked_packages,
@@ -119,16 +119,40 @@ def _cache_put(cache, ecosystem, name, version, vulns):
 
 
 def _post_json(url, payload):
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    # Audited: fixed HTTPS OSV_API_URL; package identifiers are JSON body fields, not URL components.
-    # nosemgrep
-    with urllib.request.urlopen(req, timeout=OSV_TIMEOUT) as resp:  # nosemgrep
-        return json.loads(resp.read().decode("utf-8"))
+    """POST JSON only to the fixed HTTPS OSV API endpoints.
+
+    HTTPSConnection pins the host and excludes custom URL schemes.
+    """
+    parsed = urlsplit(url)
+    allowed_paths = {"/v1/query", "/v1/querybatch"}
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname != "api.osv.dev"
+        or parsed.port is not None
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.path not in allowed_paths
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise OsvScanError("OSV endpoint is not an approved HTTPS API URL")
+
+    body = json.dumps(payload).encode("utf-8")
+    connection = http.client.HTTPSConnection("api.osv.dev", timeout=OSV_TIMEOUT)
+    try:
+        connection.request(
+            "POST", parsed.path, body=body,
+            headers={"Content-Type": "application/json"},
+        )
+        response = connection.getresponse()
+        raw = response.read(5 * 1024 * 1024 + 1)
+        if response.status != 200:
+            raise OSError(f"OSV API returned HTTP {response.status}")
+        if len(raw) > 5 * 1024 * 1024:
+            raise OSError("OSV response exceeded the 5 MiB response limit")
+        return json.loads(raw.decode("utf-8"))
+    finally:
+        connection.close()
 
 
 def check_vulnerabilities(name, version, ecosystem):
@@ -154,7 +178,7 @@ def check_vulnerabilities(name, version, ecosystem):
 
     try:
         data = _post_json(OSV_API_URL, payload)
-    except (urllib.error.URLError, OSError, json.JSONDecodeError) as exc:
+    except (OSError, http.client.HTTPException, json.JSONDecodeError) as exc:
         raise OsvScanError(f"OSV query failed: {exc}") from exc
 
     if not isinstance(data, dict):
@@ -240,8 +264,8 @@ def check_vulnerabilities_batch(packages, offline=None, use_cache=True):
                         data = _post_json(OSV_BATCH_URL, chunk_payload)
                         last_exc = None
                         break
-                    except (urllib.error.HTTPError, urllib.error.URLError,
-                            OSError, json.JSONDecodeError) as exc:
+                    except (OSError, http.client.HTTPException,
+                            json.JSONDecodeError) as exc:
                         last_exc = exc
                         if attempt + 1 < OSV_MAX_ATTEMPTS:
                             time.sleep(_OSV_RETRY_SLEEP)
