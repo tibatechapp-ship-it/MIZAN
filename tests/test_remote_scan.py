@@ -224,10 +224,10 @@ class RefValidationTests(unittest.TestCase):
                 validate_ref(ref)
 
     def test_invalid_ref_rejected_before_network(self):
-        with patch("mizan.remote_scan.urllib.request.urlopen") as urlopen:
+        with patch("mizan.remote_scan.http.client.HTTPSConnection") as connection:
             with self.assertRaises(RemoteScanError):
                 remote_scan.fetch_tarball("owner/repo", ref="../secret")
-            urlopen.assert_not_called()
+            connection.assert_not_called()
 
 
 class ScanRemoteEndToEndTests(unittest.TestCase):
@@ -293,3 +293,81 @@ class ScanRemoteEndToEndTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TarballRequestTests(unittest.TestCase):
+    def test_redirect_is_pinned_to_codeload_and_token_is_not_forwarded(self):
+        calls = []
+        payload = b"safe-tarball"
+
+        class Response:
+            def __init__(self, status, location=None, data=b""):
+                self.status = status
+                self._location = location
+                self._data = data
+
+            def getheader(self, name):
+                return self._location if name.lower() == "location" else None
+
+            def read(self, amount=None):
+                return self._data if amount is None else self._data[:amount]
+
+        class Connection:
+            def __init__(self, host, timeout=None):
+                self.host = host
+
+            def request(self, method, path, headers=None):
+                calls.append((self.host, method, path, dict(headers or {})))
+
+            def getresponse(self):
+                if self.host == "api.github.com":
+                    return Response(
+                        302,
+                        "https://codeload.github.com/owner/repo/legacy.tar.gz/feature/secure-scan",
+                    )
+                return Response(200, data=payload)
+
+            def close(self):
+                pass
+
+        with patch("mizan.remote_scan.http.client.HTTPSConnection", side_effect=Connection):
+            data = remote_scan.fetch_tarball(
+                "owner/repo", ref="feature/secure-scan", token="test-secret"
+            )
+        self.assertEqual(data, payload)
+        self.assertEqual([item[0] for item in calls], ["api.github.com", "codeload.github.com"])
+        self.assertEqual(calls[0][2], "/repos/owner/repo/tarball/feature/secure-scan")
+        self.assertEqual(calls[0][3]["Authorization"], "token test-secret")
+        self.assertNotIn("Authorization", calls[1][3])
+
+    def test_untrusted_redirect_host_is_rejected(self):
+        calls = []
+
+        class Response:
+            status = 302
+
+            def getheader(self, name):
+                return "https://attacker.example/owner/repo/archive.tar.gz"
+
+            def read(self, amount=None):
+                return b""
+
+        class Connection:
+            def __init__(self, host, timeout=None):
+                self.host = host
+
+            def request(self, method, path, headers=None):
+                calls.append(self.host)
+
+            def getresponse(self):
+                return Response()
+
+            def close(self):
+                pass
+
+        with patch("mizan.remote_scan.http.client.HTTPSConnection", side_effect=Connection):
+            with self.assertRaises(RemoteScanError):
+                remote_scan.fetch_tarball("owner/repo", ref="main")
+        self.assertEqual(calls, ["api.github.com"])
+
+
