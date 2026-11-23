@@ -22,42 +22,52 @@ VULN_RECORD = {"id": "GHSA-test-1", "summary": "Critical issue"}
 
 
 def _fake_urlopen(responses):
-    """Build a urlopen mock that routes by request URL."""
+    """Return an HTTPSConnection factory that simulates fixed OSV API routes."""
     calls = []
 
     class Resp:
+        status = 200
+
         def __init__(self, payload):
             self._payload = payload
 
-        def read(self):
-            return json.dumps(self._payload).encode()
+        def read(self, amount=None):
+            raw = json.dumps(self._payload).encode()
+            return raw if amount is None else raw[:amount]
 
-        def __enter__(self):
-            return self
+    class Conn:
+        def __init__(self, host, timeout=None):
+            if host != "api.osv.dev":
+                raise AssertionError(f"unexpected HTTPS host: {host}")
+            self.path = None
+            self.payload = None
 
-        def __exit__(self, *exc):
-            return False
+        def request(self, method, path, body=None, headers=None):
+            if method != "POST":
+                raise AssertionError(f"unexpected method: {method}")
+            self.path = path
+            self.payload = json.loads(body.decode())
+            calls.append(path)
 
-    def factory(req, timeout=None):
-        url = req.get_full_url()
-        calls.append(url)
-        if url.endswith("querybatch"):
-            body = json.loads(req.data.decode())
-            out = []
-            for q in body["queries"]:
-                if q["package"]["name"] == "requests":
-                    out.append({"vuln_ids": ["GHSA-test-1"]})
-                else:
-                    out.append({"vuln_ids": []})
-            return Resp({"results": out})
-        if url.endswith("query"):
-            body = json.loads(req.data.decode())
-            if body["package"]["name"] == "requests":
-                return Resp({"vulns": [VULN_RECORD]})
-            return Resp({"vulns": []})
-        raise AssertionError(f"unexpected URL {url}")
+        def getresponse(self):
+            if self.path.endswith("querybatch"):
+                out = []
+                for query in self.payload["queries"]:
+                    if query["package"]["name"] == "requests":
+                        out.append({"vuln_ids": ["GHSA-test-1"]})
+                    else:
+                        out.append({"vuln_ids": []})
+                return Resp({"results": out})
+            if self.path.endswith("query"):
+                if self.payload["package"]["name"] == "requests":
+                    return Resp({"vulns": [VULN_RECORD]})
+                return Resp({"vulns": []})
+            raise AssertionError(f"unexpected OSV path: {self.path}")
 
-    return factory, calls
+        def close(self):
+            pass
+
+    return Conn, calls
 
 
 class _CleanEnv(unittest.TestCase):
@@ -87,7 +97,7 @@ class BatchTests(_CleanEnv):
             {"name": "lodash", "version": "4.17.21", "ecosystem": "npm"},
         ]
         factory, calls = _fake_urlopen(None)
-        with patch("mizan.vulnerabilities.urllib.request.urlopen",
+        with patch("mizan.vulnerabilities.http.client.HTTPSConnection",
                    side_effect=factory):
             results = check_vulnerabilities_batch(pkgs, use_cache=False)
         self.assertEqual(len(calls), 1)  # ONE network call
@@ -101,7 +111,7 @@ class BatchTests(_CleanEnv):
             {"name": "clean-pkg", "version": "1.0.0", "ecosystem": "PyPI"},
         ]
         factory, calls = _fake_urlopen(None)
-        with patch("mizan.vulnerabilities.urllib.request.urlopen",
+        with patch("mizan.vulnerabilities.http.client.HTTPSConnection",
                    side_effect=factory):
             results = check_vulnerabilities_batch(pkgs, use_cache=False)
         # batch + one detail query for the vulnerable package only
@@ -117,7 +127,7 @@ class BatchTests(_CleanEnv):
             {"name": "b", "version": "2", "ecosystem": "PyPI"},
         ]
         factory, _ = _fake_urlopen(None)
-        with patch("mizan.vulnerabilities.urllib.request.urlopen",
+        with patch("mizan.vulnerabilities.http.client.HTTPSConnection",
                    side_effect=factory):
             results = check_vulnerabilities_batch(pkgs, use_cache=False)
         self.assertEqual(results[1]["vulns"], [VULN_RECORD])
@@ -133,12 +143,12 @@ class CacheTests(_CleanEnv):
     def test_second_scan_served_from_cache(self):
         pkgs = [{"name": "clean-pkg", "version": "1.0.0", "ecosystem": "PyPI"}]
         factory, calls = _fake_urlopen(None)
-        with patch("mizan.vulnerabilities.urllib.request.urlopen",
+        with patch("mizan.vulnerabilities.http.client.HTTPSConnection",
                    side_effect=factory):
             first = check_vulnerabilities_batch(pkgs)
         self.assertEqual(len(calls), 1)
         factory2, calls2 = _fake_urlopen(None)
-        with patch("mizan.vulnerabilities.urllib.request.urlopen",
+        with patch("mizan.vulnerabilities.http.client.HTTPSConnection",
                    side_effect=factory2):
             second = check_vulnerabilities_batch(pkgs)
         self.assertEqual(calls2, [])  # zero network on second run
@@ -148,7 +158,7 @@ class CacheTests(_CleanEnv):
     def test_cache_file_created(self):
         pkgs = [{"name": "clean-pkg", "version": "1.0.0", "ecosystem": "PyPI"}]
         factory, _ = _fake_urlopen(None)
-        with patch("mizan.vulnerabilities.urllib.request.urlopen",
+        with patch("mizan.vulnerabilities.http.client.HTTPSConnection",
                    side_effect=factory):
             check_vulnerabilities_batch(pkgs)
         cache_path = Path(".mizan/osv-cache.json")
@@ -160,12 +170,12 @@ class CacheTests(_CleanEnv):
     def test_ttl_expiry_forces_refetch(self):
         pkgs = [{"name": "clean-pkg", "version": "1.0.0", "ecosystem": "PyPI"}]
         factory, _ = _fake_urlopen(None)
-        with patch("mizan.vulnerabilities.urllib.request.urlopen",
+        with patch("mizan.vulnerabilities.http.client.HTTPSConnection",
                    side_effect=factory):
             check_vulnerabilities_batch(pkgs)
         os.environ["MIZAN_OSV_CACHE_TTL"] = "0"
         factory2, calls2 = _fake_urlopen(None)
-        with patch("mizan.vulnerabilities.urllib.request.urlopen",
+        with patch("mizan.vulnerabilities.http.client.HTTPSConnection",
                    side_effect=factory2):
             result = check_vulnerabilities_batch(pkgs)
         self.assertEqual(len(calls2), 1)
@@ -174,12 +184,12 @@ class CacheTests(_CleanEnv):
     def test_single_query_uses_cache_when_enabled(self):
         os.environ["MIZAN_OSV_CACHE"] = "1"
         factory, calls = _fake_urlopen(None)
-        with patch("mizan.vulnerabilities.urllib.request.urlopen",
+        with patch("mizan.vulnerabilities.http.client.HTTPSConnection",
                    side_effect=factory):
             check_vulnerabilities("clean-pkg", "1.0.0", "PyPI")
         self.assertEqual(len(calls), 1)
         factory2, calls2 = _fake_urlopen(None)
-        with patch("mizan.vulnerabilities.urllib.request.urlopen",
+        with patch("mizan.vulnerabilities.http.client.HTTPSConnection",
                    side_effect=factory2):
             again = check_vulnerabilities("clean-pkg", "1.0.0", "PyPI")
         self.assertEqual(calls2, [])
@@ -196,7 +206,7 @@ class OfflineTests(_CleanEnv):
     def test_offline_serves_cache(self):
         pkgs = [{"name": "clean-pkg", "version": "1.0.0", "ecosystem": "PyPI"}]
         factory, _ = _fake_urlopen(None)
-        with patch("mizan.vulnerabilities.urllib.request.urlopen",
+        with patch("mizan.vulnerabilities.http.client.HTTPSConnection",
                    side_effect=factory):
             check_vulnerabilities_batch(pkgs)
         results = check_vulnerabilities_batch(pkgs, offline=True)
@@ -206,7 +216,7 @@ class OfflineTests(_CleanEnv):
         os.environ["MIZAN_OFFLINE"] = "1"
         pkgs = [{"name": "unknown-pkg", "version": "9.9.9", "ecosystem": "PyPI"}]
         factory, calls = _fake_urlopen(None)
-        with patch("mizan.vulnerabilities.urllib.request.urlopen",
+        with patch("mizan.vulnerabilities.http.client.HTTPSConnection",
                    side_effect=factory):
             results = check_vulnerabilities_batch(pkgs)
         self.assertEqual(calls, [])
@@ -222,7 +232,7 @@ class OfflineTests(_CleanEnv):
         Path(".mizan/osv-cache.json").write_text("{broken json", encoding="utf-8")
         pkgs = [{"name": "clean-pkg", "version": "1.0.0", "ecosystem": "PyPI"}]
         factory, calls = _fake_urlopen(None)
-        with patch("mizan.vulnerabilities.urllib.request.urlopen",
+        with patch("mizan.vulnerabilities.http.client.HTTPSConnection",
                    side_effect=factory):
             results = check_vulnerabilities_batch(pkgs)
         self.assertEqual(len(calls), 1)  # rebuild via network
