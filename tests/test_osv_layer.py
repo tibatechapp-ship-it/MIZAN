@@ -126,6 +126,10 @@ class BatchTests(_CleanEnv):
 
 
 class CacheTests(_CleanEnv):
+    def test_cache_key_uses_sha256_length(self):
+        key = vulnerabilities._cache_key("PyPI", "sample", "1.0.0")
+        self.assertEqual(len(key), 64)
+
     def test_second_scan_served_from_cache(self):
         pkgs = [{"name": "clean-pkg", "version": "1.0.0", "ecosystem": "PyPI"}]
         factory, calls = _fake_urlopen(None)
@@ -150,7 +154,7 @@ class CacheTests(_CleanEnv):
         cache_path = Path(".mizan/osv-cache.json")
         self.assertTrue(cache_path.exists())
         data = json.loads(cache_path.read_text(encoding="utf-8"))
-        self.assertEqual(data["version"], 1)
+        self.assertEqual(data["version"], 2)
         self.assertTrue(data["entries"])
 
     def test_ttl_expiry_forces_refetch(self):
