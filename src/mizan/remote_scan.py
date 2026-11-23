@@ -294,7 +294,10 @@ def _https_get(host: str, path: str, headers: dict[str, str], timeout: int):
         connection.request("GET", path, headers=headers)
         response = connection.getresponse()
         location = response.getheader("Location")
-        data = response.read(MAX_TARBALL_BYTES + 1)
+        # Redirect/error bodies are bounded separately; only the final
+        # successful tarball receives the full download-size allowance.
+        limit = MAX_TARBALL_BYTES + 1 if response.status == 200 else 64 * 1024
+        data = response.read(limit)
         return response.status, location, data
     finally:
         connection.close()
