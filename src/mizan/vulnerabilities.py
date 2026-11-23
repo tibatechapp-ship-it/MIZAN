@@ -13,6 +13,7 @@ Q1 performance hardening (P1):
 
 import hashlib
 import http.client
+import ssl
 import json
 import os
 import re
@@ -138,7 +139,7 @@ def _post_json(url, payload):
         raise OsvScanError("OSV endpoint is not an approved HTTPS API URL")
 
     body = json.dumps(payload).encode("utf-8")
-    connection = http.client.HTTPSConnection("api.osv.dev", timeout=OSV_TIMEOUT)
+    connection = http.client.HTTPSConnection("api.osv.dev", timeout=OSV_TIMEOUT, context=ssl.create_default_context())
     try:
         connection.request(
             "POST", parsed.path, body=body,
