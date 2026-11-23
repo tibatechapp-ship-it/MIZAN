@@ -57,6 +57,7 @@ import tarfile
 import tempfile
 import urllib.error
 import urllib.request
+from urllib.parse import quote
 
 __all__ = [
     "RemoteScanError",
@@ -67,6 +68,7 @@ __all__ = [
     "extract_tarball",
     "scan_remote",
     "validate_owner_repo",
+    "validate_ref",
     "link_resolves_inside",
 ]
 
@@ -87,6 +89,9 @@ _OWNER_REPO_RE = re.compile(
 )
 
 
+_REF_RE = re.compile(r"^[A-Za-z0-9._/-]{1,255}$")
+
+
 class RemoteScanError(Exception):
     """A remote-scan input violated a documented filter or failed to fetch."""
 
@@ -99,6 +104,23 @@ def validate_owner_repo(owner_repo: str) -> str:
             "with [A-Za-z0-9_.-] segments only"
         )
     return owner_repo
+
+
+def validate_ref(ref: str = None):
+    """Validate a Git ref before placing it in the fixed GitHub API URL."""
+    if ref is None:
+        return None
+    if not isinstance(ref, str) or not _REF_RE.fullmatch(ref):
+        raise RemoteScanError(
+            "invalid ref: use 1-255 ASCII letters, digits, '.', '_', '-', or '/'"
+        )
+    parts = ref.split("/")
+    if (ref.startswith("/") or ref.endswith("/") or "//" in ref
+            or any(part in {"", ".", ".."} or part.endswith(".")
+                   or part.endswith(".lock") for part in parts)
+            or "@{" in ref):
+        raise RemoteScanError("invalid ref: unsafe Git ref path")
+    return ref
 
 
 def _member_name_safe(name: str) -> bool:
@@ -275,15 +297,17 @@ def fetch_tarball(owner_repo: str, ref: str = None,
     Authorization header — it is never printed, logged, or stored.
     """
     validate_owner_repo(owner_repo)
+    ref = validate_ref(ref)
     url = f"https://api.github.com/repos/{owner_repo}/tarball"
     if ref:
-        url += f"/{ref}"
+        url += "/" + quote(ref, safe="/")
     req = urllib.request.Request(url)
     req.add_header("User-Agent", "mizan-remote-scan")
     req.add_header("Accept", "application/vnd.github+json")
     if token:
         req.add_header("Authorization", f"token {token}")
     try:
+        # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected -- fixed HTTPS api.github.com origin; owner/repo and ref are validated, ref is path-quoted.
         with urllib.request.urlopen(req, timeout=120) as resp:
             data = resp.read(MAX_TARBALL_BYTES + 1)
     except urllib.error.HTTPError as exc:
