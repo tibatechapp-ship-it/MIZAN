@@ -14,13 +14,13 @@ from mizan.scan import scan_repository
 
 
 def _mock_osv_empty():
-    cm = MagicMock()
-    resp = MagicMock()
-    resp.read.return_value = b'{"vulns": []}'
-    cm.__enter__.return_value = resp
-    cm.__exit__.return_value = False
-    mock = MagicMock(return_value=cm)
-    return patch("mizan.vulnerabilities.urllib.request.urlopen", mock)
+    connection = MagicMock()
+    response = MagicMock()
+    response.status = 200
+    response.read.return_value = b'{"vulns": []}'
+    connection.getresponse.return_value = response
+    mock = MagicMock(return_value=connection)
+    return patch("mizan.vulnerabilities.http.client.HTTPSConnection", mock)
 
 
 # ---------- Category 6: Performance (BM-86 -> BM-95) ----------
