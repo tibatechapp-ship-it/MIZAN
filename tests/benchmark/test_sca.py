@@ -50,7 +50,7 @@ OSV_LODASH_4_17_0 = {
 
 def _mock_osv(vulns):
     """Context manager: patch the pinned OSV HTTPS client."""
-    def factory(host, timeout=None):
+    def factory(host, timeout=None, context=None):
         if host != "api.osv.dev":
             raise AssertionError(f"unexpected host {host}")
         connection = MagicMock()
