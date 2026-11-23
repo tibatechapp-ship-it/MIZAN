@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def _run_mock(vulns):
-    def factory(host, timeout=None):
+    def factory(host, timeout=None, context=None):
         if host != "api.osv.dev":
             raise AssertionError(f"unexpected host {host}")
         connection = MagicMock()
