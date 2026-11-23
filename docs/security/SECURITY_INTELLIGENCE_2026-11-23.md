@@ -23,11 +23,11 @@ For each matching asset, use the official vendor advisory to identify fixed vers
 
 ## Relevant releases/advisories
 
-- FastAPI GHSA-f56c-v883-vx8r, published Nov 17: denial of service from quadratic request-parameter processing. Review affected/fixed versions, update dependency set, and add a request-parameter stress regression test.
-- FastAPI 0.162.3, Nov 10: updated locked Pydantic to 2.14.3 and added Python 3.15 support. This is a release update, not a blanket security fix; test compatibility before adoption.
+- FastAPI GHSA-f56c-v883-vx8r, published Nov 17: high-severity denial of service from quadratic request-parameter processing. Affected versions are >=0.123.2 and <0.163.2; fixed in 0.163.2. Upgrade to >=0.163.2 and add a request-parameter stress regression test. Reverse-proxy limits reduce exposure but are not a complete fix.
+- FastAPI 0.163.2 (Nov 17) contains the security fix. Releases 0.164.0 and 0.165.0 (Nov 18) add configurable request-body and form-parsing limits; adopt the fixed version and latest compatible patch, then test. Do not treat 0.162.3 as the security fix.
 - GPUStack CVE-2026-102895: prioritize if deployed. Reported fixed from 2.2.0; verify current vendor advisory/latest supported patch. Never grant admin solely because a request appears to originate from loopback or contains client-controlled forwarded headers.
 - Apache Roller CVE-2026-129448: actively exploited; security sources report fixed release 6.1.6+. Verify official vendor release notes and update if deployed.
-- Android/Chrome/Outlook: install the latest vendor-supported security update. Android patch level 2026-11-05 is a minimum bulletin checkpoint, not a substitute for newer patches.
+- Oracle Java CVE-2026-114938 (Java4Shell), highlighted by CISA Nov 17: identify JDK/JRE versions including runtimes bundled inside containers/appliances, patch per Oracle/vendor advisory, and restrict unauthenticated Base64 input/size if patching is delayed. Monitor unexpected JVM crashes and rogue Java processes.\n- Android/Chrome/Outlook: install the latest vendor-supported security update. Android patch level 2026-11-05 is a minimum bulletin checkpoint, not a substitute for newer patches.
 
 ## Apply to our products
 
@@ -84,7 +84,7 @@ For each matching asset, use the official vendor advisory to identify fixed vers
 - CISA KEV Nov 10: https://content.govdelivery.com/accounts/USDHSCISA/bulletins/4325e4d
 - CISA KEV Nov 13: https://content.govdelivery.com/accounts/USDHSCISA/bulletins/432b09e
 - CISA KEV catalog: https://www.cisa.gov/known-exploited-vulnerabilities-catalog
-- FastAPI advisories: https://github.com/fastapi/fastapi/security/advisories
+- FastAPI advisory (fixed in 0.163.2): https://github.com/fastapi/fastapi/security/advisories/GHSA-f56c-v883-vx8r\n- CISA Java4Shell alert, Nov 17: https://content.govdelivery.com/accounts/USDHSCISA/bulletins/4332a87\n- FastAPI advisories: https://github.com/fastapi/fastapi/security/advisories
 - FastAPI releases: https://fastapi.tiangolo.com/release-notes/
 - Android security bulletins: https://source.android.com/docs/security/bulletin
 - OWASP Agent Security Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html
