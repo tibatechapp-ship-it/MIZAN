@@ -23,6 +23,7 @@ import tarfile
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from mizan import remote_scan
 from mizan.remote_scan import (
@@ -30,6 +31,7 @@ from mizan.remote_scan import (
     extract_tarball,
     scan_remote,
     validate_owner_repo,
+    validate_ref,
 )
 
 SMALL_PY = (
@@ -207,6 +209,25 @@ class OwnerRepoValidationTests(unittest.TestCase):
                     "a/../../x", "a/b ", None):
             with self.assertRaises(RemoteScanError):
                 validate_owner_repo(bad)
+
+
+class RefValidationTests(unittest.TestCase):
+    def test_valid_refs(self):
+        for ref in ("main", "v1.2.3", "feature/secure-scan", "refs/pull/123/head"):
+            self.assertEqual(validate_ref(ref), ref)
+
+    def test_rejects_unsafe_refs(self):
+        for ref in ("", "../secret", "feature/../main", "branch?token=x",
+                    "branch#fragment", "refs//heads/main", "/main", "main/",
+                    "x\\y", "branch.lock", "bad" + chr(0) + "ref"):
+            with self.subTest(ref=ref), self.assertRaises(RemoteScanError):
+                validate_ref(ref)
+
+    def test_invalid_ref_rejected_before_network(self):
+        with patch("mizan.remote_scan.urllib.request.urlopen") as urlopen:
+            with self.assertRaises(RemoteScanError):
+                remote_scan.fetch_tarball("owner/repo", ref="../secret")
+            urlopen.assert_not_called()
 
 
 class ScanRemoteEndToEndTests(unittest.TestCase):
