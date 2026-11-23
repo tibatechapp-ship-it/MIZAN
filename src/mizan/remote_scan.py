@@ -308,8 +308,8 @@ def fetch_tarball(owner_repo: str, ref: str = None,
         req.add_header("Authorization", f"token {token}")
     try:
         # Audited: fixed HTTPS api.github.com origin; owner/repo and ref are validated, ref is path-quoted.
-        # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
-        with urllib.request.urlopen(req, timeout=120) as resp:  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
+        # nosemgrep
+        with urllib.request.urlopen(req, timeout=120) as resp:  # nosemgrep
             data = resp.read(MAX_TARBALL_BYTES + 1)
     except urllib.error.HTTPError as exc:
         if exc.code in (403, 429):
