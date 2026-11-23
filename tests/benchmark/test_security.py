@@ -143,13 +143,12 @@ class ReadOnlyBenchmark(unittest.TestCase):
             root = Path(t)
             content_before = "requests==2.0.0\n"
             (root / "requirements.txt").write_text(content_before)
-            with patch("mizan.vulnerabilities.urllib.request.urlopen") as mock:
-                cm = MagicMock()
+            with patch("mizan.vulnerabilities.http.client.HTTPSConnection") as mock:
+                connection = mock.return_value
                 resp = MagicMock()
+                resp.status = 200
                 resp.read.return_value = b'{"vulns": []}'
-                cm.__enter__.return_value = resp
-                cm.__exit__.return_value = False
-                mock.return_value = cm
+                connection.getresponse.return_value = resp
                 scan_repository(root)
             content_after = (root / "requirements.txt").read_text()
             self.assertEqual(content_before, content_after)
@@ -162,16 +161,15 @@ class NetworkBenchmark(unittest.TestCase):
 
     def test_82_payload_metadata_only(self):
         """BM-82: OSV payload contains name+version+ecosystem only."""
-        with patch("mizan.vulnerabilities.urllib.request.urlopen") as mock:
-            cm = MagicMock()
+        with patch("mizan.vulnerabilities.http.client.HTTPSConnection") as mock:
+            connection = mock.return_value
             resp = MagicMock()
+            resp.status = 200
             resp.read.return_value = b'{"vulns": []}'
-            cm.__enter__.return_value = resp
-            cm.__exit__.return_value = False
-            mock.return_value = cm
+            connection.getresponse.return_value = resp
             check_vulnerabilities("requests", "2.0.0", "PyPI")
-            req = mock.call_args[0][0]
-            payload = json.loads(req.data.decode())
+            request_args, request_kwargs = connection.request.call_args
+            payload = json.loads(request_kwargs["body"].decode())
             self.assertEqual(set(payload.keys()), {"package", "version"})
             self.assertEqual(set(payload["package"].keys()), {"name", "ecosystem"})
 
