@@ -36,7 +36,7 @@ def _fake_urlopen(responses):
             return raw if amount is None else raw[:amount]
 
     class Conn:
-        def __init__(self, host, timeout=None):
+        def __init__(self, host, timeout=None, context=None):
             if host != "api.osv.dev":
                 raise AssertionError(f"unexpected HTTPS host: {host}")
             self.path = None
