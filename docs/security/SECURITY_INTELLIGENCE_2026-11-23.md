@@ -27,7 +27,8 @@ For each matching asset, use the official vendor advisory to identify fixed vers
 - FastAPI 0.163.2 (Nov 17) contains the security fix. Releases 0.164.0 and 0.165.0 (Nov 18) add configurable request-body and form-parsing limits; adopt the fixed version and latest compatible patch, then test. Do not treat 0.162.3 as the security fix.
 - GPUStack CVE-2026-102895: prioritize if deployed. Reported fixed from 2.2.0; verify current vendor advisory/latest supported patch. Never grant admin solely because a request appears to originate from loopback or contains client-controlled forwarded headers.
 - Apache Roller CVE-2026-129448: actively exploited; security sources report fixed release 6.1.6+. Verify official vendor release notes and update if deployed.
-- Oracle Java CVE-2026-114938 (Java4Shell), highlighted by CISA Nov 17: identify JDK/JRE versions including runtimes bundled inside containers/appliances, patch per Oracle/vendor advisory, and restrict unauthenticated Base64 input/size if patching is delayed. Monitor unexpected JVM crashes and rogue Java processes.\n- Android/Chrome/Outlook: install the latest vendor-supported security update. Android patch level 2026-11-05 is a minimum bulletin checkpoint, not a substitute for newer patches.
+- Oracle Java CVE-2026-114938 (Java4Shell), highlighted by CISA Nov 17: identify JDK/JRE versions including runtimes bundled inside containers/appliances, patch per Oracle/vendor advisory, and restrict unauthenticated Base64 input/size if patching is delayed. Monitor unexpected JVM crashes and rogue Java processes.
+- Android/Chrome/Outlook: install the latest vendor-supported security update. Android patch level 2026-11-05 is a minimum bulletin checkpoint, not a substitute for newer patches.
 
 ## Apply to our products
 
@@ -84,7 +85,9 @@ For each matching asset, use the official vendor advisory to identify fixed vers
 - CISA KEV Nov 10: https://content.govdelivery.com/accounts/USDHSCISA/bulletins/4325e4d
 - CISA KEV Nov 13: https://content.govdelivery.com/accounts/USDHSCISA/bulletins/432b09e
 - CISA KEV catalog: https://www.cisa.gov/known-exploited-vulnerabilities-catalog
-- FastAPI advisory (fixed in 0.163.2): https://github.com/fastapi/fastapi/security/advisories/GHSA-f56c-v883-vx8r\n- CISA Java4Shell alert, Nov 17: https://content.govdelivery.com/accounts/USDHSCISA/bulletins/4332a87\n- FastAPI advisories: https://github.com/fastapi/fastapi/security/advisories
+- FastAPI advisory (fixed in 0.163.2): https://github.com/fastapi/fastapi/security/advisories/GHSA-f56c-v883-vx8r
+- CISA Java4Shell alert, Nov 17: https://content.govdelivery.com/accounts/USDHSCISA/bulletins/4332a87
+- FastAPI advisories: https://github.com/fastapi/fastapi/security/advisories
 - FastAPI releases: https://fastapi.tiangolo.com/release-notes/
 - Android security bulletins: https://source.android.com/docs/security/bulletin
 - OWASP Agent Security Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html
