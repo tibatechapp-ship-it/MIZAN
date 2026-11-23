@@ -50,6 +50,7 @@ unchanged; ``scan-remote`` reuses ``scan_repository`` on the extracted tree.
 
 import io
 import http.client
+import ssl
 import os
 import posixpath
 import re
@@ -289,7 +290,7 @@ def extract_tarball(fileobj, dest_dir: str) -> dict:
 
 def _https_get(host: str, path: str, headers: dict[str, str], timeout: int):
     """GET a path from a hard-coded HTTPS host using http.client."""
-    connection = http.client.HTTPSConnection(host, timeout=timeout)
+    connection = http.client.HTTPSConnection(host, timeout=timeout, context=ssl.create_default_context())
     try:
         connection.request("GET", path, headers=headers)
         response = connection.getresponse()
