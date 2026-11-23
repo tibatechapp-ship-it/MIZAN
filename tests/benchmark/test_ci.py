@@ -15,14 +15,16 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def _run_mock(vulns):
-    def factory(*args, **kwargs):
-        cm = MagicMock()
-        resp = MagicMock()
-        resp.read.return_value = json.dumps({"vulns": vulns}).encode()
-        cm.__enter__.return_value = resp
-        cm.__exit__.return_value = False
-        return cm
-    return patch("mizan.vulnerabilities.urllib.request.urlopen", side_effect=factory)
+    def factory(host, timeout=None):
+        if host != "api.osv.dev":
+            raise AssertionError(f"unexpected host {host}")
+        connection = MagicMock()
+        response = MagicMock()
+        response.status = 200
+        response.read.return_value = json.dumps({"vulns": vulns}).encode()
+        connection.getresponse.return_value = response
+        return connection
+    return patch("mizan.vulnerabilities.http.client.HTTPSConnection", side_effect=factory)
 
 
 VULNS = [
