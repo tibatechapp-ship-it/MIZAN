@@ -125,7 +125,8 @@ def _post_json(url, payload):
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected -- fixed HTTPS OSV_API_URL; package identifiers are JSON body fields, not URL components.
+    # Audited: fixed HTTPS OSV_API_URL; package identifiers are JSON body fields, not URL components.
+    # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
     with urllib.request.urlopen(req, timeout=OSV_TIMEOUT) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
