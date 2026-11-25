@@ -37,7 +37,7 @@ python -m unittest discover -s tests   # full suite must stay green
 python run_mizan.py                    # self-scan; quality + security
 ```
 
-Python 3.10–3.14 are supported; CI runs the matrix. The docs gate
+Python 3.11–3.15 are supported; CI runs the matrix. The docs gate
 (`tests/test_version_consistency.py` and friends) fails the build if
 README/doc numbers drift from the measured counters.
 
