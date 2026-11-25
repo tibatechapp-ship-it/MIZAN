@@ -9,7 +9,7 @@ pass, explained in plain language, never executed.
 
 [![MIZAN CI](https://github.com/tibatechapp-ship-it/MIZAN/actions/workflows/tests.yml/badge.svg)](https://github.com/tibatechapp-ship-it/MIZAN/actions/workflows/tests.yml)
 [![MIZAN Security Scan](https://github.com/tibatechapp-ship-it/MIZAN/actions/workflows/mizan.yml/badge.svg)](https://github.com/tibatechapp-ship-it/MIZAN/actions/workflows/mizan.yml)
-[![Python](https://img.shields.io/badge/python-3.10%E2%80%933.14-blue)](https://github.com/tibatechapp-ship-it/MIZAN/actions/workflows/tests.yml)
+[![Python](https://img.shields.io/badge/python-3.11%E2%80%933.15-blue)](https://github.com/tibatechapp-ship-it/MIZAN/actions/workflows/tests.yml)
 [![Release](https://img.shields.io/github/v/release/tibatechapp-ship-it/MIZAN)](https://github.com/tibatechapp-ship-it/MIZAN/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Self-scan](https://img.shields.io/badge/self--scan-0%20actionable%20findings-brightgreen)](CHANGELOG.md)
@@ -81,7 +81,7 @@ not aspirational marketing.
 | Sampled findings verified true positives | **20/20**, zero security FPs | v0.12.0 field notes |
 | MIZAN scanning its own repository | **0 actionable findings** across all scanners | v0.12.1+, strict `--gate` |
 | Field benchmark — 100 real open-source repos (zai-org first, Nov 2026) | **median 1.04 s / repo**, 0 crashes, 0 timeouts | v0.12.2 field wave |
-| Test suite | **761 tests green**, Python 3.10–3.14 | CI, every push |
+| Test suite | **761 tests green**, Python 3.11–3.15 | CI, every push |
 | Trusted CI steps that can hide a failure | **0** (`continue-on-error` removed) | v0.12.1 |
 
 ## Measured accuracy — scope and limits (E-02, 2026-11-17 review)
