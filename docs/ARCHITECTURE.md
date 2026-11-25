@@ -10,7 +10,7 @@ listing).
 ## Layout
 
 - `src/mizan/` — engine + CLI. Minimal measured runtime dependencies
-  (`PyYAML>=6.0`, `tomli` only on Python < 3.11 — see `pyproject.toml`); no
+  (`PyYAML>=6.0.4` — see `pyproject.toml`; no
   analyzer/network frameworks. Tree-sitter-style additions still require an
   explicit recorded decision, see ROADMAP.
 - `action/` — composite GitHub Action (dependency-vulnerability scan +

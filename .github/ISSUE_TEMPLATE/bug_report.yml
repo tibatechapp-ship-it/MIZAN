@@ -46,7 +46,7 @@ body:
     id: environment
     attributes:
       label: Environment
-      placeholder: "OS, Python version (3.10–3.14)"
+      placeholder: "OS, Python version (3.11–3.15)"
     validations:
       required: true
   - type: textarea

@@ -3,6 +3,6 @@
   "version": "0.17.0-dev",
   "type": "module",
   "devDependencies": {
-    "eslint": "^9.39.5"
+    "eslint": "^10.15.0"
   }
 }
