@@ -158,11 +158,11 @@ class QualityBenchmark(unittest.TestCase):
         missing = expected - actual
         self.assertEqual(missing, set(), f"missing benchmark files: {missing}")
 
-    def test_98_python_3_10_to_3_14_compatible(self):
-        """BM-98: pyproject.toml declares >=3.10 and no 3.14-only syntax."""
+    def test_98_python_3_11_to_3_15_compatible(self):
+        """BM-98: pyproject.toml declares the maintained Python >=3.11 baseline."""
         pyproject = (self.ROOT / "pyproject.toml").read_text(encoding="utf-8")
-        self.assertIn("requires-python", pyproject)
-        # Check no walrus in comprehension at module level (Python 3.10 support)
+        self.assertIn('requires-python = ">=3.11"', pyproject)
+        # Compile every source module; the CI matrix validates each supported interpreter.
         for path in (self.ROOT / "src").rglob("*.py"):
             try:
                 compile(path.read_text(encoding="utf-8"), str(path), "exec")
@@ -170,13 +170,13 @@ class QualityBenchmark(unittest.TestCase):
                 self.fail(f"syntax error in {path.name}: {exc}")
 
     def test_99_ci_workflow_covers_all_versions(self):
-        """BM-99: CI matrix covers 3.10, 3.11, 3.12, 3.13, 3.14."""
+        """BM-99: CI matrix covers maintained Python 3.11 through 3.15."""
         import yaml
         with open(self.ROOT / ".github" / "workflows" / "tests.yml") as f:
             data = yaml.safe_load(f)
         job = data["jobs"]["tests"]
         versions = job["strategy"]["matrix"]["python-version"]
-        for v in ("3.10", "3.11", "3.12", "3.13", "3.14"):
+        for v in ("3.11", "3.12", "3.13", "3.14", "3.15"):
             self.assertIn(v, versions, f"missing version in CI: {v}")
 
     def test_100_no_uncommitted_whitespace(self):
