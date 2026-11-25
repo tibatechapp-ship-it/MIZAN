@@ -49,14 +49,15 @@ unchanged; ``scan-remote`` reuses ``scan_repository`` on the extracted tree.
 """
 
 import io
+import http.client
+import ssl
 import os
 import posixpath
 import re
 import shutil
 import tarfile
 import tempfile
-import urllib.error
-import urllib.request
+from urllib.parse import quote, urlsplit
 
 __all__ = [
     "RemoteScanError",
@@ -67,6 +68,7 @@ __all__ = [
     "extract_tarball",
     "scan_remote",
     "validate_owner_repo",
+    "validate_ref",
     "link_resolves_inside",
 ]
 
@@ -87,6 +89,9 @@ _OWNER_REPO_RE = re.compile(
 )
 
 
+_REF_RE = re.compile(r"^[A-Za-z0-9._/-]{1,255}$")
+
+
 class RemoteScanError(Exception):
     """A remote-scan input violated a documented filter or failed to fetch."""
 
@@ -99,6 +104,23 @@ def validate_owner_repo(owner_repo: str) -> str:
             "with [A-Za-z0-9_.-] segments only"
         )
     return owner_repo
+
+
+def validate_ref(ref: str = None):
+    """Validate a Git ref before placing it in the fixed GitHub API URL."""
+    if ref is None:
+        return None
+    if not isinstance(ref, str) or not _REF_RE.fullmatch(ref):
+        raise RemoteScanError(
+            "invalid ref: use 1-255 ASCII letters, digits, '.', '_', '-', or '/'"
+        )
+    parts = ref.split("/")
+    if (ref.startswith("/") or ref.endswith("/") or "//" in ref
+            or any(part in {"", ".", ".."} or part.endswith(".")
+                   or part.endswith(".lock") for part in parts)
+            or "@{" in ref):
+        raise RemoteScanError("invalid ref: unsafe Git ref path")
+    return ref
 
 
 def _member_name_safe(name: str) -> bool:
@@ -266,40 +288,81 @@ def extract_tarball(fileobj, dest_dir: str) -> dict:
             "links": links}
 
 
+def _https_get(host: str, path: str, headers: dict[str, str], timeout: int):
+    """GET a path from a hard-coded HTTPS host using http.client."""
+    connection = http.client.HTTPSConnection(host, timeout=timeout, context=ssl.create_default_context())
+    try:
+        connection.request("GET", path, headers=headers)
+        response = connection.getresponse()
+        location = response.getheader("Location")
+        # Redirect/error bodies are bounded separately; only the final
+        # successful tarball receives the full download-size allowance.
+        limit = MAX_TARBALL_BYTES + 1 if response.status == 200 else 64 * 1024
+        data = response.read(limit)
+        return response.status, location, data
+    finally:
+        connection.close()
+
+
 def fetch_tarball(owner_repo: str, ref: str = None,
                   token: str = None) -> bytes:
-    """Download the GitHub tarball for owner/repo (optionally at ref).
+    """Download a GitHub tarball using fixed HTTPS API/CDN hosts.
 
-    The token (if any) is read from the MIZAN_GH_TOKEN or GH_TOKEN
-    environment variable by the caller and is only ever placed in the
-    Authorization header — it is never printed, logged, or stored.
+    GitHub's API redirects tarball requests to codeload.github.com. Redirects
+    are followed manually and only to that exact HTTPS host; credentials are
+    never forwarded to the CDN.
     """
     validate_owner_repo(owner_repo)
-    url = f"https://api.github.com/repos/{owner_repo}/tarball"
+    ref = validate_ref(ref)
+    path = f"/repos/{owner_repo}/tarball"
     if ref:
-        url += f"/{ref}"
-    req = urllib.request.Request(url)
-    req.add_header("User-Agent", "mizan-remote-scan")
-    req.add_header("Accept", "application/vnd.github+json")
+        path += "/" + quote(ref, safe="/")
+    headers = {
+        "User-Agent": "mizan-remote-scan",
+        "Accept": "application/vnd.github+json",
+    }
     if token:
-        req.add_header("Authorization", f"token {token}")
+        headers["Authorization"] = f"token {token}"
+
     try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            data = resp.read(MAX_TARBALL_BYTES + 1)
-    except urllib.error.HTTPError as exc:
-        if exc.code in (403, 429):
+        status, location, data = _https_get("api.github.com", path, headers, 120)
+        if status in (301, 302, 303, 307, 308):
+            parsed = urlsplit(location or "")
+            prefix = f"/{owner_repo}/"
+            if (
+                parsed.scheme != "https"
+                or parsed.hostname != "codeload.github.com"
+                or parsed.port is not None
+                or parsed.username is not None
+                or parsed.password is not None
+                or parsed.query
+                or parsed.fragment
+                or not parsed.path.startswith(prefix)
+                or ".." in parsed.path.split("/")
+                or "//" in parsed.path
+            ):
+                raise RemoteScanError("GitHub tarball redirect is not an approved HTTPS CDN URL")
+            status, _location, data = _https_get(
+                "codeload.github.com", parsed.path,
+                {"User-Agent": "mizan-remote-scan"}, 120,
+            )
+        if status in (403, 429):
             raise RemoteScanError(
-                f"GitHub API refused the tarball request (HTTP {exc.code}) — "
+                f"GitHub API refused the tarball request (HTTP {status}) — "
                 "rate limit likely; set MIZAN_GH_TOKEN/GH_TOKEN to raise it"
-            ) from exc
-        if exc.code == 404:
+            )
+        if status == 404:
             raise RemoteScanError(
                 f"repository or ref not found: {owner_repo}"
                 + (f"@{ref}" if ref else "")
-            ) from exc
-        raise RemoteScanError(
-            f"GitHub API returned HTTP {exc.code} for {owner_repo}"
-        ) from exc
+            )
+        if status != 200:
+            raise RemoteScanError(
+                f"GitHub API returned HTTP {status} for {owner_repo}"
+            )
+    except (OSError, http.client.HTTPException) as exc:
+        raise RemoteScanError(f"GitHub tarball request failed for {owner_repo}: {exc}") from exc
+
     if len(data) > MAX_TARBALL_BYTES:
         _reject(f"rejected: tarball exceeds {MAX_TARBALL_BYTES} bytes")
     return data
