@@ -2,9 +2,9 @@
   "schema": "mizan-baseline/1",
   "tool": "MIZAN Security",
   "version": "0.17.0-dev",
-  "created_at": "2026-11-17T01:56:46Z",
-  "count": 43,
-  "note": "v0.17.0-dev wave-2 post-fix regen (2026-11-17): conscious accepts = bind-all self-rule literal + doc-reference resolver FP (measure_rule_accuracy lives in tests/); change-risk entries are this wave's by-design signals",
+  "created_at": "2026-11-26T00:17:46Z",
+  "count": 41,
+  "note": "Accepted self-scan suppressions (live-audit wave 3, 2026-11-26): the doc-stale-reference hit on CHANGELOG.md measure_rule_accuracy is the consciously accepted known FP from wave 2 — the symbol exists at tests/benchmark/test_measurement_gate.py:49 but the doc-intel reference resolver only resolves symbols under src/. It re-fired on 2026-11-26 after the wave-3 CHANGELOG insert shifted its line — a live measured reproduction of audit finding F-03 (line-number fingerprints break on insert); F-03 content-identity fix is planned as the evidence wave. 40 other entries unchanged.",
   "fingerprints": {
     "81146e0d4338384b": {
       "rule": "hardcoded-bind-all-interfaces",
@@ -118,18 +118,6 @@
       "rule": "doc-missing-docstring",
       "file": "src/mizan/report/timeline.py",
       "line": 61,
-      "severity": "info"
-    },
-    "13137abde23b8a19": {
-      "rule": "doc-needs-review",
-      "file": "docs/ARCHITECTURE.md",
-      "line": 20,
-      "severity": "info"
-    },
-    "68439bb5d3bc17bf": {
-      "rule": "doc-needs-review",
-      "file": "docs/REVIEW_2026-11-10.md",
-      "line": 9,
       "severity": "info"
     },
     "dd158aa523a7aa35": {
@@ -252,10 +240,10 @@
       "line": 0,
       "severity": "info"
     },
-    "1ebd4197450500d0": {
+    "6760d5e1a5f67a06": {
       "rule": "doc-stale-reference",
       "file": "CHANGELOG.md",
-      "line": 148,
+      "line": 156,
       "severity": "medium"
     },
     "a39ae4781b951658": {
