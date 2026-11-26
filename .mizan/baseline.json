@@ -1,123 +1,130 @@
 {
-  "schema": "mizan-baseline/1",
+  "schema": "mizan-baseline/2",
+  "fingerprint_scheme": "content-anchored",
   "tool": "MIZAN Security",
   "version": "0.17.0-dev",
-  "created_at": "2026-11-26T04:36:53Z",
-  "count": 41,
-  "note": "Accepted self-scan suppressions (live-audit wave 4 regen, 2026-11-26): the doc-stale-reference hit on CHANGELOG.md measure_rule_accuracy is the consciously accepted known FP from wave 2 — the symbol exists at tests/benchmark/test_measurement_gate.py:49 but the doc-intel reference resolver only resolves symbols under src/. The wave-4 CHANGELOG insert shifted it again (157 to 165) — the FOURTH live measured reproduction of F-03 (line-number fingerprints break on any shift) in one day; the structural content-anchored fingerprint fix is the evidence wave. 40 other entries unchanged.",
+  "created_at": "2026-11-26T15:50:50Z",
+  "count": 42,
+  "note": "Accepted self-scan suppressions (live-audit wave 5 regen, 2026-11-26): content-anchored fingerprints (F-03) — code findings anchor on the offending line's TEXT, so pure line shifts no longer re-fire suppressed findings; the text itself changing re-fires honestly. The four live reproductions of the line-anchored fragility (audit insert-shift, wave-3 insert re-fire, wave-3 regen off-by-one, wave-4 insert re-fire) are the measured case this scheme closes. Line-0 findings and unreadable files degrade to the historical line-anchored formula. Consciously accepted NEW entry: doc-needs-review on docs/DEV_PLAN_V0150.md:80 (info) — the wave-5 gate.py/cli.py changes post-date the plan doc's last update; the plan-doc refresh is a separate docs task, not silently swallowed. 40 other entries are the same findings re-keyed under the content-anchored formula.",
   "fingerprints": {
-    "81146e0d4338384b": {
+    "a7504032870ed57a": {
       "rule": "hardcoded-bind-all-interfaces",
       "file": "src/mizan/analyzer.py",
       "line": 200,
       "severity": "medium"
     },
-    "ba634b6c09108068": {
+    "f03c196057cba908": {
       "rule": "hardcoded-tmp-path",
       "file": "src/mizan/analyzer.py",
       "line": 1256,
       "severity": "low"
     },
-    "97f516375d578500": {
+    "9a14bc47ca402a50": {
       "rule": "hardcoded-tmp-path",
       "file": "src/mizan/analyzer.py",
       "line": 1257,
       "severity": "low"
     },
-    "fba4f24780447624": {
+    "844d491819a6e263": {
       "rule": "doc-missing-docstring",
       "file": "scripts/run_semgrep_reference.py",
       "line": 36,
       "severity": "info"
     },
-    "4474eed236f7579d": {
+    "a8311101ec6bc2a8": {
       "rule": "doc-missing-docstring",
       "file": "scripts/run_semgrep_reference.py",
       "line": 40,
       "severity": "info"
     },
-    "a649cdfba4eca22f": {
+    "d565464fd9cb9b83": {
       "rule": "doc-missing-docstring",
       "file": "scripts/run_semgrep_reference.py",
       "line": 84,
       "severity": "info"
     },
-    "7440c1c993248141": {
+    "8e46907e7c707721": {
       "rule": "doc-missing-docstring",
       "file": "scripts/verify_all_tags.py",
       "line": 31,
       "severity": "info"
     },
-    "722380b1b261f5fe": {
+    "816a2c8a68584791": {
       "rule": "doc-missing-docstring",
       "file": "scripts/verify_all_tags.py",
       "line": 35,
       "severity": "info"
     },
-    "3cadc75ec330bd75": {
+    "ff8acb6ab7cd1628": {
       "rule": "doc-missing-docstring",
       "file": "scripts/verify_all_tags.py",
       "line": 42,
       "severity": "info"
     },
-    "bc8d1930e1e689f1": {
+    "fe7f9456ad9590bb": {
       "rule": "doc-missing-docstring",
       "file": "scripts/verify_all_tags.py",
       "line": 54,
       "severity": "info"
     },
-    "99daad4a2501807f": {
+    "a53a254fcf8690aa": {
       "rule": "doc-missing-docstring",
       "file": "scripts/verify_all_tags.py",
       "line": 67,
       "severity": "info"
     },
-    "682dee27cbf96bcc": {
+    "c496a8cad2eaf899": {
       "rule": "doc-missing-docstring",
       "file": "src/mizan/portfolio.py",
       "line": 367,
       "severity": "info"
     },
-    "7dae5bc19cdcf3c8": {
+    "a5cea693e67a75af": {
       "rule": "doc-missing-docstring",
       "file": "src/mizan/report/cli.py",
       "line": 73,
       "severity": "info"
     },
-    "121d54067212fa6e": {
+    "ef80c149a4237a29": {
       "rule": "doc-missing-docstring",
       "file": "src/mizan/report/cli.py",
       "line": 133,
       "severity": "info"
     },
-    "fdbe9aea9d8ea962": {
+    "717c7a32299fd4c1": {
       "rule": "doc-missing-docstring",
       "file": "src/mizan/report/cli.py",
       "line": 141,
       "severity": "info"
     },
-    "d696fdc605a4e262": {
+    "ff6a5417d2b712ae": {
       "rule": "doc-missing-docstring",
       "file": "src/mizan/report/cli.py",
       "line": 169,
       "severity": "info"
     },
-    "152648bb1f1ca0f0": {
+    "9facae096ee345f5": {
       "rule": "doc-missing-docstring",
       "file": "src/mizan/report/cli.py",
       "line": 216,
       "severity": "info"
     },
-    "dcaafa7b389c8a43": {
+    "bfc0aa8aa19874cb": {
       "rule": "doc-missing-docstring",
       "file": "src/mizan/report/cwe.py",
       "line": 38,
       "severity": "info"
     },
-    "baee46e39d6b5b5b": {
+    "dd37d01ca4e67f26": {
       "rule": "doc-missing-docstring",
       "file": "src/mizan/report/timeline.py",
       "line": 61,
+      "severity": "info"
+    },
+    "71fc4938f1bda9ed": {
+      "rule": "doc-needs-review",
+      "file": "docs/DEV_PLAN_V0150.md",
+      "line": 80,
       "severity": "info"
     },
     "dd158aa523a7aa35": {
@@ -240,13 +247,13 @@
       "line": 0,
       "severity": "info"
     },
-    "90f6793e8404285c": {
+    "70ee4b631b43ad33": {
       "rule": "doc-stale-reference",
       "file": "CHANGELOG.md",
       "line": 165,
       "severity": "medium"
     },
-    "a39ae4781b951658": {
+    "ef94c868d4f66627": {
       "rule": "doc-stale-reference",
       "file": "docs/MEASUREMENT.md",
       "line": 42,
