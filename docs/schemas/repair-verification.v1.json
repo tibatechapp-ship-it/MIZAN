@@ -17,7 +17,10 @@
     "verified",
     "transfer",
     "isolation_limits",
-    "human_review_required"
+    "human_review_required",
+    "patch_provenance",
+    "execution_surface",
+    "container"
   ],
   "additionalProperties": false,
   "properties": {
@@ -187,6 +190,22 @@
       "items": {"type": "string", "minLength": 1},
       "description": "What the isolation actually enforces and what it only declares — never oversold."
     },
-    "human_review_required": {"const": true}
+    "human_review_required": {"const": true},
+    "patch_provenance": {"enum": ["untrusted", "trusted"]},
+    "execution_surface": {"enum": ["host", "container"]},
+    "container": {
+      "type": ["object", "null"],
+      "required": ["image", "name", "network", "mount", "workdir", "command", "container_receives_host_env"],
+      "additionalProperties": false,
+      "properties": {
+        "image": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1},
+        "network": {"const": "none"},
+        "mount": {"type": "string", "minLength": 1},
+        "workdir": {"type": "string", "minLength": 1},
+        "command": {"type": "string", "minLength": 1},
+        "container_receives_host_env": {"const": false}
+      }
+    }
   }
 }
