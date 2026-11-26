@@ -25,9 +25,11 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from mizan.analyzer import analyze_repository
 from mizan.cli import main
+from mizan.integrations import verify_repair
 from mizan.integrations.repair_request import build_repair_request
 from mizan.integrations.sarif_import import _fallback_fingerprint
 from mizan.integrations.verify_repair import (
@@ -209,6 +211,7 @@ class RefusalTests(unittest.TestCase):
             patch_path=patch_path or self._patch_file(),
             repo_path=self.repo,
             tests_command="true",
+            patch_provenance="trusted",
             **kwargs,
         )
 
@@ -307,6 +310,7 @@ class RefusalTests(unittest.TestCase):
                 patch_path=self._patch_file(),
                 repo_path=plain,
                 tests_command="true",
+                patch_provenance="trusted",
             )
         self.assertIn("not a usable git repository", str(ctx.exception))
 
@@ -350,6 +354,7 @@ class VerifiedPatchTests(unittest.TestCase):
         report = run_verification(
             self.request_path, self.patch_path, self.repo,
             tests_command=f"{sys.executable} -m unittest discover -q",
+            patch_provenance="trusted",
         )
         self.assertEqual(report["schema"], VERIFY_SCHEMA)
         self.assertTrue(report["verified"])
@@ -370,7 +375,7 @@ class VerifiedPatchTests(unittest.TestCase):
             report["finding_check"]["original_finding_id"],
             self.request["finding_id"],
         )
-        self.assertEqual(len(report["isolation_limits"]), 5)
+        self.assertEqual(len(report["isolation_limits"]), 6)
         self.assertTrue(report["human_review_required"])
 
     def test_fingerprint_identity_survives_the_round_trip(self):
@@ -387,6 +392,7 @@ class VerifiedPatchTests(unittest.TestCase):
         report = run_verification(
             self.request_path, self.patch_path, self.repo,
             tests_command="true",
+            patch_provenance="trusted",
         )
         self.assertEqual(
             report["request"]["finding_id"], expected)
@@ -402,6 +408,7 @@ class VerifiedPatchTests(unittest.TestCase):
         report = run_verification(
             _write_json(self.work / "rq2.json", request),
             self.patch_path, self.repo, tests_command="true",
+            patch_provenance="trusted",
         )
         statuses = {c["what"]: c["status"] for c in report["checks"]}
         self.assertEqual(statuses["the original finding no longer fires"],
@@ -419,6 +426,7 @@ class VerifiedPatchTests(unittest.TestCase):
         report = run_verification(
             self.request_path, self.patch_path, self.repo,
             tests_command="true", keep_worktree=True,
+            patch_provenance="trusted",
         )
         self.assertFalse(report["worktree"]["disposed"])
         self.assertTrue(
@@ -437,6 +445,7 @@ class VerifiedPatchTests(unittest.TestCase):
         report = run_verification(
             self.request_path, self.patch_path, self.repo,
             tests_command="true",
+            patch_provenance="trusted",
         )
         from mizan.integrations.verify_repair import (
             write_verification_report,
@@ -451,6 +460,7 @@ class VerifiedPatchTests(unittest.TestCase):
             self.request_path, self.patch_path, self.repo,
             tests_command="true",
             transfer_branch="verified-fix", approve=True,
+            patch_provenance="trusted",
         )
         self.assertTrue(report["transfer"]["done"])
         self.assertTrue(report["worktree"]["disposed"])
@@ -483,6 +493,7 @@ class VerifiedPatchTests(unittest.TestCase):
             self.repo,
             tests_command="true",
             transfer_branch="should-not-exist", approve=True,
+            patch_provenance="trusted",
         )
         self.assertFalse(report["verified"])
         self.assertFalse(report["transfer"]["done"])
@@ -519,7 +530,8 @@ class MeasuredFailureTests(unittest.TestCase):
         patch_path.write_text(patch_text, encoding="utf-8")
         return run_verification(
             self.request_path, patch_path, self.repo,
-            tests_command="true", **kwargs,
+            tests_command="true", patch_provenance="trusted",
+            **kwargs,
         )
 
     def test_patch_that_does_not_fix_the_finding_fails_verification(
@@ -575,6 +587,7 @@ class MeasuredFailureTests(unittest.TestCase):
         report = run_verification(
             self.request_path, patch_path, self.repo,
             tests_command=f"{sys.executable} -m unittest discover -q",
+            patch_provenance="trusted",
         )
         self.assertFalse(report["verified"])
         self.assertTrue(report["tests"]["ran"])
@@ -594,6 +607,7 @@ class MeasuredFailureTests(unittest.TestCase):
         report = run_verification(
             self.request_path, patch_path, self.repo,
             tests_command="sleep 30", timeout=2,
+            patch_provenance="trusted",
         )
         self.assertFalse(report["verified"])
         self.assertTrue(report["tests"]["ran"])
@@ -622,6 +636,7 @@ class MeasuredFailureTests(unittest.TestCase):
         report2 = run_verification(
             _write_json(self.work / "rq.json", request),
             patch, empty_repo,
+            patch_provenance="trusted",
         )
         self.assertFalse(report2["verified"])
         self.assertTrue(report2["tests"]["ran"])
@@ -635,6 +650,145 @@ class MeasuredFailureTests(unittest.TestCase):
         self.assertIn("Ran 0 tests", report2["tests"]["summary"])
         self.assertIn("never counts as a pass",
                       report2["tests"]["summary"])
+
+
+class ProvenanceGateTests(unittest.TestCase):
+    """F-07: untrusted patches refuse host test execution. The two
+    declared escape hatches are the container and explicit trust —
+    there is no silent third path, and the refusal happens BEFORE any
+    side effect (no worktree is ever created for a refused run)."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.work = Path(self.temp.name)
+        self.repo = _make_repo(self.work / "repo")
+        self.request = _fixture_request(self.repo)
+        self.patch = _patch_for(self.repo, FIXED_APP)
+        self.request_path = _write_json(
+            self.work / "request.json", self.request)
+        self.patch_path = self.work / "fix.patch"
+        self.patch_path.write_text(self.patch, encoding="utf-8")
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def _no_leftover_worktrees(self):
+        return sorted(
+            p.name for p in
+            Path(tempfile.gettempdir()).glob("mizan-verify-*")
+        )
+
+    def test_default_provenance_refuses_host_execution(self):
+        with self.assertRaises(VerifyRepairError) as ctx:
+            run_verification(
+                self.request_path, self.patch_path, self.repo,
+                tests_command="true",
+            )
+        message = str(ctx.exception)
+        self.assertIn("untrusted", message)
+        self.assertIn("--container-image", message)
+        self.assertIn("--patch-provenance trusted", message)
+        # the refusal happens before any side effect
+        self.assertEqual(self._no_leftover_worktrees(), [])
+
+    def test_invalid_provenance_value_is_refused(self):
+        with self.assertRaises(VerifyRepairError) as ctx:
+            run_verification(
+                self.request_path, self.patch_path, self.repo,
+                tests_command="true", patch_provenance="yolo",
+            )
+        self.assertIn("provenance", str(ctx.exception))
+        self.assertEqual(self._no_leftover_worktrees(), [])
+
+    def test_trusted_provenance_runs_on_host(self):
+        report = run_verification(
+            self.request_path, self.patch_path, self.repo,
+            tests_command="true", patch_provenance="trusted",
+        )
+        self.assertEqual(report["patch_provenance"], "trusted")
+        self.assertEqual(report["execution_surface"], "host")
+        self.assertIsNone(report["container"])
+        self.assertTrue(
+            any("trusted" in lim for lim in report["isolation_limits"]),
+            "the host path must declare what trusted means",
+        )
+
+    def test_untrusted_patch_runs_inside_container(self):
+        # deterministic: the docker probe is mocked usable and the
+        # test-command seam is observed — docker itself is NOT
+        # required to exist in the test environment.
+        with mock.patch.object(
+            verify_repair, "_docker_probe", return_value=(True, "ok"),
+        ), mock.patch.object(
+            verify_repair, "_run_test_command",
+            return_value=mock.Mock(returncode=0, stdout="ok\n",
+                                   stderr=""),
+        ):
+            report = run_verification(
+                self.request_path, self.patch_path, self.repo,
+                tests_command="true",
+                container_image="mizan-ci:latest",
+            )
+        self.assertEqual(report["patch_provenance"], "untrusted")
+        self.assertEqual(report["execution_surface"], "container")
+        block = report["container"]
+        self.assertIsNotNone(block)
+        self.assertEqual(block["image"], "mizan-ci:latest")
+        self.assertEqual(block["network"], "none")
+        self.assertEqual(block["workdir"], "/src")
+        self.assertTrue(block["mount"].endswith(":/src:rw"))
+        self.assertIn("--network none", block["command"])
+        self.assertIn("mizan-ci:latest", block["command"])
+        self.assertIn("--name mizan-verify-", block["command"])
+        self.assertFalse(block["container_receives_host_env"])
+        self.assertTrue(any(
+            "container" in lim for lim in report["isolation_limits"]))
+        self.assertTrue(report["verified"])
+
+    def test_unusable_docker_refuses_instead_of_host_fallback(self):
+        with mock.patch.object(
+            verify_repair, "_docker_probe",
+            return_value=(False, "docker is not installed: nope"),
+        ):
+            with self.assertRaises(VerifyRepairError) as ctx:
+                run_verification(
+                    self.request_path, self.patch_path, self.repo,
+                    tests_command="true",
+                    container_image="mizan-ci:latest",
+                )
+        message = str(ctx.exception)
+        self.assertIn("F-07", message)
+        self.assertIn("mizan-ci:latest", message)
+        self.assertIn("docker is not installed", message)
+        self.assertIn("--patch-provenance trusted", message)
+        self.assertEqual(self._no_leftover_worktrees(), [])
+
+    def test_container_command_construction_is_exact(self):
+        built = verify_repair._build_container_command(
+            "img:1", "cname", Path("/wt"),
+            ["python", "-m", "unittest"],
+        )
+        self.assertEqual(built, [
+            "docker", "run", "--rm", "--name", "cname",
+            "--network", "none",
+            "-v", "/wt:/src:rw", "-w", "/src",
+            "img:1", "python", "-m", "unittest",
+        ])
+
+    def test_unlaunchable_test_command_is_recorded_loudly(self):
+        # a command that cannot even be launched is a measured
+        # failure in the report — never an unhandled crash, and
+        # never a silent pass
+        report = run_verification(
+            self.request_path, self.patch_path, self.repo,
+            tests_command="mizan-definitely-not-a-real-binary-xyz",
+            patch_provenance="trusted",
+        )
+        self.assertFalse(report["verified"])
+        self.assertFalse(report["tests"]["ran"])
+        self.assertFalse(report["tests"]["passed"])
+        self.assertIn("could not be executed",
+                      report["tests"]["summary"])
 
 
 class CliContractTests(unittest.TestCase):
@@ -662,6 +816,7 @@ class CliContractTests(unittest.TestCase):
             "verify-repair", str(self.request_path),
             "--patch", str(patch), "--repo", str(self.repo),
             "--tests", "true",
+            "--patch-provenance", "trusted",
         ])
         self.assertEqual(code, 0)
 
@@ -675,6 +830,7 @@ class CliContractTests(unittest.TestCase):
             "verify-repair", str(self.request_path),
             "--patch", str(patch), "--repo", str(self.repo),
             "--tests", "true",
+            "--patch-provenance", "trusted",
         ])
         self.assertEqual(code, 1)
 
@@ -685,6 +841,7 @@ class CliContractTests(unittest.TestCase):
                 "verify-repair", str(self.request_path),
                 "--patch", str(patch), "--repo", str(self.repo),
                 "--tests", "true",
+                "--patch-provenance", "trusted",
                 "--transfer-branch", "no-approval",
             ])
         self.assertEqual(ctx.exception.code, 2)
@@ -696,6 +853,7 @@ class CliContractTests(unittest.TestCase):
                 "verify-repair",
                 str(self.work / "missing.json"),
                 "--patch", str(patch), "--repo", str(self.repo),
+                "--patch-provenance", "trusted",
             ])
         self.assertEqual(ctx.exception.code, 2)
 
@@ -706,6 +864,7 @@ class CliContractTests(unittest.TestCase):
             "verify-repair", str(self.request_path),
             "--patch", str(patch), "--repo", str(self.repo),
             "--tests", "true", "--output", str(out),
+            "--patch-provenance", "trusted",
         ])
         self.assertEqual(code, 0)
         report = json.loads(out.read_text(encoding="utf-8"))
@@ -760,6 +919,31 @@ class SchemaConsistencyTests(unittest.TestCase):
             schema["properties"]["checks"]["minItems"], 3,
             "the three measured checks are the floor of the report",
         )
+        # F-07 fields are required report content, not optional
+        self.assertEqual(
+            schema["properties"]["patch_provenance"]["enum"],
+            ["untrusted", "trusted"],
+        )
+        self.assertEqual(
+            schema["properties"]["execution_surface"]["enum"],
+            ["host", "container"],
+        )
+        for key in ("patch_provenance", "execution_surface", "container"):
+            self.assertIn(
+                key, schema["required"],
+                f"F-07 field {key} must be required in the schema",
+            )
+        container_props = (
+            schema["properties"]["container"]["properties"]
+        )
+        self.assertEqual(
+            container_props["network"]["const"], "none",
+            "the container surface is network-off by construction",
+        )
+        self.assertEqual(
+            container_props["container_receives_host_env"]["const"],
+            False,
+        )
 
     def test_report_shape_is_covered_by_schema(self):
         schema = self._schema()
@@ -776,6 +960,7 @@ class SchemaConsistencyTests(unittest.TestCase):
                 patch_path,
                 repo,
                 tests_command="true",
+                patch_provenance="trusted",
             )
         self.assertLessEqual(
             set(report.keys()), required,

@@ -48,6 +48,20 @@ VERIFY_SCHEMA = "mizan.repair-verification.v1"
 DEFAULT_TESTS_COMMAND = [sys.executable, "-m", "unittest", "discover", "-q"]
 DEFAULT_TEST_TIMEOUT = 600
 
+# F-07 (2026-11-26 live audit): a patch written by a coding agent is
+# UNTRUSTED by default. Its test code must never execute on the host
+# machine unless the operator says so explicitly — by declaring the
+# patch trusted, or by demanding container isolation. There is no
+# third, silent path: the default refuses.
+PATCH_PROVENANCE_VALUES = ("untrusted", "trusted")
+DEFAULT_PATCH_PROVENANCE = "untrusted"
+
+# The container execution surface: the worktree is bind-mounted
+# read-write at this fixed in-container path (the patch is applied on
+# the host by git; only the TEST command runs inside the container).
+CONTAINER_MOUNT = "/src"
+CONTAINER_WORKDIR = "/src"
+
 # Environment variable name fragments that mark a secret: any var whose
 # UPPERCASE name contains one is removed from the subprocess env.
 SECRET_ENV_MARKERS = (
@@ -78,6 +92,28 @@ ISOLATION_LIMITS = [
     "user's tree are NOT part of what the patch is verified against",
     "a transferred branch is staged for human review only — MIZAN "
     "never merges it",
+]
+
+# F-07: per-surface honesty. The base limits above apply to every
+# verification; the execution surface adds what IT enforces and what
+# IT only declares.
+HOST_TRUSTED_LIMITS = [
+    "patch_provenance=trusted is the operator's explicit declaration "
+    "that this patch is safe to execute on the host — the worktree "
+    "and the environment scrub are then the ONLY guards, and the test "
+    "code runs as the invoking user",
+]
+
+CONTAINER_LIMITS = [
+    "the test command runs inside the declared image with docker "
+    "--network none and the worktree bind-mounted read-write at "
+    "" + CONTAINER_WORKDIR + "; the isolation is as strong as the "
+    "image and the docker configuration — MIZAN does not verify the "
+    "image's contents",
+    "the container receives NO host environment variables (the "
+    "image's own environment applies) — stricter than the host-path "
+    "secret scrubbing, and it means tests needing configuration must "
+    "bake it into the image or the command",
 ]
 
 _GIT_IDENTITY = [
@@ -153,6 +189,58 @@ def build_verification_env(allow_network: bool = False):
         ),
     }
     return env, audit
+
+
+def _docker_probe(env: dict[str, str],
+                  timeout: int) -> tuple[bool, str]:
+    """Probe whether docker is actually usable (binary present AND
+    daemon reachable). Returns ``(available, detail)`` — the detail is
+    a human sentence for the refusal when unavailable. A requested
+    container surface that cannot exist is a refusal, never a silent
+    host fallback."""
+    try:
+        proc = subprocess.run(
+            ["docker", "info", "--format", "ok"], env=env,
+            capture_output=True, text=True, timeout=timeout,
+        )
+    except FileNotFoundError as exc:
+        return False, f"docker is not installed: {exc}"
+    except subprocess.TimeoutExpired:
+        return False, "the docker probe timed out"
+    if proc.returncode != 0:
+        stderr = (proc.stderr or "").strip()
+        return False, (
+            f"the docker daemon is unreachable (exit "
+            f"{proc.returncode}): {stderr[:300]}"
+        )
+    return True, "ok"
+
+
+def _build_container_command(image: str, container_name: str,
+                             worktree: Path,
+                             cmd: list[str]) -> list[str]:
+    """The exact docker invocation for the container execution
+    surface: no network, the worktree bind-mounted read-write at the
+    fixed container path, the named container so a timed-out run can
+    be force-removed, and no host environment passed through."""
+    return [
+        "docker", "run", "--rm", "--name", container_name,
+        "--network", "none",
+        "-v", f"{worktree}:{CONTAINER_MOUNT}:rw",
+        "-w", CONTAINER_WORKDIR,
+        image, *cmd,
+    ]
+
+
+def _run_test_command(run_cmd: list[str], cwd: Path, env: dict[str, str],
+                      timeout: int):
+    """Execute the (possibly containerized) test command. A thin seam:
+    the container path is observable in tests without requiring a
+    docker daemon in the test environment."""
+    return subprocess.run(
+        run_cmd, cwd=str(cwd), env=env,
+        capture_output=True, text=True, timeout=timeout,
+    )
 
 
 def _load_and_validate_request(request_path: Path) -> dict[str, Any]:
@@ -334,8 +422,17 @@ def run_verification(
     transfer_branch: str | None = None,
     approve: bool = False,
     timeout: int | None = None,
+    patch_provenance: str = DEFAULT_PATCH_PROVENANCE,
+    container_image: str | None = None,
 ) -> dict[str, Any]:
     """Verify one repair request's patch in an isolated worktree.
+
+    F-07 execution surface: a patch is untrusted by default. With the
+    default provenance the tests NEVER run on the host — pass
+    ``container_image`` (docker, network-off) for hard isolation or
+    ``patch_provenance="trusted"`` to accept host execution
+    explicitly. Both set is allowed: the container surface wins and
+    the provenance is recorded.
 
     Returns the ``mizan.repair-verification.v1`` report. Raises
     :class:`VerifyRepairError` on every refusal (exit-2 path in the
@@ -346,6 +443,18 @@ def run_verification(
     timeout = timeout or DEFAULT_TEST_TIMEOUT
 
     # --- fail-fast refusals (no side effects yet) --------------------
+    if patch_provenance not in PATCH_PROVENANCE_VALUES:
+        raise VerifyRepairError(
+            f"patch provenance must be one of "
+            f"{PATCH_PROVENANCE_VALUES}, got {patch_provenance!r}"
+        )
+    if container_image is None and patch_provenance != "trusted":
+        raise VerifyRepairError(
+            "F-07: an untrusted patch refuses to run its tests on the "
+            "host — pass --container-image IMAGE (docker, network-off) "
+            "for hard isolation, or declare --patch-provenance trusted "
+            "to accept host execution explicitly"
+        )
     if transfer_branch and not approve:
         raise VerifyRepairError(
             "--transfer-branch requires --approve: transfer is the "
@@ -388,6 +497,19 @@ def run_verification(
                 f"branch {transfer_branch!r} already exists in "
                 f"{repo_root} — refusing to overwrite; pick another "
                 f"name or delete the old branch first"
+            )
+
+    # F-07: a container surface that cannot exist is a refusal BEFORE
+    # any side effect (no worktree is created for a run that cannot
+    # happen) — never a silent fallback to host execution.
+    if container_image is not None:
+        available, detail = _docker_probe(git_env, timeout)
+        if not available:
+            raise VerifyRepairError(
+                f"F-07: --container-image {container_image!r} was "
+                f"requested but {detail} — install/start docker, or "
+                f"pass --patch-provenance trusted explicitly if you "
+                f"accept host execution"
             )
 
     # --- isolated worktree -------------------------------------------
@@ -448,6 +570,13 @@ def run_verification(
 
         # --- tests: no secrets, no network (default) --------------
         test_env, env_audit = build_verification_env(allow_network)
+        container_name = f"mizan-verify-{uuid.uuid4().hex[:10]}"
+        if container_image is not None:
+            run_cmd = _build_container_command(
+                container_image, container_name, worktree, cmd,
+            )
+        else:
+            run_cmd = cmd
         tests: dict[str, Any] = {
             "command": shlex.join(cmd),
             "ran": False,
@@ -456,9 +585,8 @@ def run_verification(
             "cwd": str(worktree),
         }
         try:
-            proc = subprocess.run(
-                cmd, cwd=str(worktree), env=test_env,
-                capture_output=True, text=True, timeout=timeout,
+            proc = _run_test_command(
+                run_cmd, worktree, test_env, timeout,
             )
             tests["ran"] = True
             tests["returncode"] = proc.returncode
@@ -487,6 +615,29 @@ def run_verification(
             tests["summary"] = (
                 f"test run timed out after {exc.timeout}s and was "
                 f"killed — an unfinished run never counts as a pass"
+            )
+            if container_image is not None:
+                # A killed docker client can leave the container
+                # running — force-remove it by name (best effort,
+                # recorded either way).
+                subprocess.run(
+                    ["docker", "rm", "-f", container_name],
+                    env=test_env, capture_output=True, text=True,
+                    timeout=timeout,
+                )
+                tests["summary"] += (
+                    "\nthe named container was force-removed after "
+                    "the timeout"
+                )
+                tests["force_removed_on_timeout"] = True
+        except OSError as exc:
+            # A command that cannot even be launched is a measured
+            # failure, recorded loudly — never an unhandled crash, and
+            # never a silent pass.
+            tests["ran"] = False
+            tests["passed"] = False
+            tests["summary"] = (
+                f"the test command could not be executed: {exc}"
             )
         tests["environment"] = env_audit
 
@@ -560,6 +711,24 @@ def run_verification(
             "measuring the diff stat",
         )
 
+        limits = list(ISOLATION_LIMITS)
+        if container_image is not None:
+            limits += CONTAINER_LIMITS
+        else:
+            limits += HOST_TRUSTED_LIMITS
+
+        container_block = None
+        if container_image is not None:
+            container_block = {
+                "image": container_image,
+                "name": container_name,
+                "network": "none",
+                "mount": f"{worktree}:{CONTAINER_MOUNT}:rw",
+                "workdir": CONTAINER_WORKDIR,
+                "command": shlex.join(run_cmd),
+                "container_receives_host_env": False,
+            }
+
         report = {
             "schema": VERIFY_SCHEMA,
             "request": {
@@ -574,6 +743,11 @@ def run_verification(
             },
             "repo": str(repo_root),
             "head_before": head,
+            "patch_provenance": patch_provenance,
+            "execution_surface": (
+                "container" if container_image is not None else "host"
+            ),
+            "container": container_block,
             "worktree": {
                 "path": str(worktree),
                 "base": head,
@@ -602,7 +776,7 @@ def run_verification(
             "checks": checks,
             "verified": verified,
             "transfer": transfer,
-            "isolation_limits": list(ISOLATION_LIMITS),
+            "isolation_limits": limits,
             "human_review_required": True,
         }
         result = report
@@ -657,6 +831,12 @@ __all__ = [
     "SECRET_ENV_MARKERS",
     "NETWORK_ENV_VARS",
     "ISOLATION_LIMITS",
+    "HOST_TRUSTED_LIMITS",
+    "CONTAINER_LIMITS",
+    "PATCH_PROVENANCE_VALUES",
+    "DEFAULT_PATCH_PROVENANCE",
+    "CONTAINER_MOUNT",
+    "CONTAINER_WORKDIR",
     "VerifyRepairError",
     "build_verification_env",
     "run_verification",
