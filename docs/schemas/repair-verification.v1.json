@@ -2,13 +2,16 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://raw.githubusercontent.com/tibatechapp-ship-it/MIZAN/main/docs/schemas/repair-verification.v1.json",
   "title": "MIZAN repair verification (repair-verification.v1)",
-  "description": "The measured result of applying one repair-request.v1 patch inside an isolated git worktree: changed files, whether the original finding still fires, findings the patch introduced, the tests that ran (no secrets, no network by default), the transfer decision (explicit approval only), and the honestly declared isolation limits. The original finding fingerprint persists verbatim through the round trip.",
+  "description": "The measured result of applying one repair-request.v1 patch inside an isolated git worktree: changed files, whether the original finding still fires, findings the patch introduced, the tests that ran (no secrets, no network by default), the transfer decision (explicit approval only), and the honestly declared isolation limits. The original finding fingerprint persists verbatim through the round trip. F-07: patches are untrusted by default — host test execution refuses unless the patch is declared trusted or a container image is demanded; the report records the provenance, the execution surface, and the exact container contract.",
   "type": "object",
   "required": [
     "schema",
     "request",
     "repo",
     "head_before",
+    "patch_provenance",
+    "execution_surface",
+    "container",
     "worktree",
     "patch",
     "finding_check",
@@ -46,6 +49,52 @@
       "type": "string",
       "pattern": "^[0-9a-f]{40}$",
       "description": "The commit the isolated worktree was created from."
+    },
+    "patch_provenance": {
+      "enum": ["untrusted", "trusted"],
+      "description": "F-07: the operator's declaration of the patch's trust level. Untrusted is the default and refuses host test execution — the declared escape hatches are the container surface and explicit trust."
+    },
+    "execution_surface": {
+      "enum": ["host", "container"],
+      "description": "Where the test command actually ran. host requires patch_provenance=trusted; container is the hard-isolation path (docker, network-off)."
+    },
+    "container": {
+      "description": "null when execution_surface is host; the measured container contract otherwise.",
+      "type": ["object", "null"],
+      "required": [
+        "image",
+        "name",
+        "network",
+        "mount",
+        "workdir",
+        "command",
+        "container_receives_host_env"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "image": {"type": "string", "minLength": 1},
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The named container so a timed-out run can be force-removed."
+        },
+        "network": {"const": "none"},
+        "mount": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The worktree bind-mount, read-write, at the fixed in-container path."
+        },
+        "workdir": {"type": "string", "minLength": 1},
+        "command": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The exact docker run invocation that executed the tests."
+        },
+        "container_receives_host_env": {
+          "const": false,
+          "description": "The container receives NO host environment variables — stricter than the host-path secret scrubbing."
+        }
+      }
     },
     "worktree": {
       "type": "object",
@@ -129,6 +178,10 @@
         "returncode": {"type": ["integer", "null"]},
         "cwd": {"type": "string", "minLength": 1},
         "summary": {"type": "string"},
+        "force_removed_on_timeout": {
+          "type": "boolean",
+          "description": "container surface only: true when a timed-out run's named container was force-removed after the kill."
+        },
         "zero_tests_detected": {
           "type": "boolean",
           "description": "true when the test command reported 'Ran 0 tests' — an empty suite never counts as a pass, regardless of the exit code (Python < 3.12 exits 0 on zero collected tests)."

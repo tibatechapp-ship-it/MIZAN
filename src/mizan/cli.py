@@ -391,7 +391,9 @@ def main(argv=None):
             "Verify one repair-request.v1 patch in an isolated git "
             "worktree: apply, run tests without secrets and without "
             "network by default, measure diff + result; transfer or "
-            "delete — the user's tree is never written"
+            "delete — the user's tree is never written. F-07: patches "
+            "are untrusted by default — host test execution refuses "
+            "unless --patch-provenance trusted or --container-image"
         ),
     )
     verify_cmd.add_argument("request", metavar="REQUEST_JSON")
@@ -429,6 +431,27 @@ def main(argv=None):
     verify_cmd.add_argument(
         "--timeout", type=int, default=600, metavar="SECONDS",
         help="test/git subprocess timeout (default: 600)",
+    )
+    verify_cmd.add_argument(
+        "--patch-provenance",
+        choices=["untrusted", "trusted"],
+        default="untrusted",
+        help=(
+            "F-07: the patch's declared trust level (default: "
+            "untrusted). An untrusted patch refuses to run its tests "
+            "on the host — pass --container-image for hard isolation, "
+            "or trusted to accept host execution explicitly"
+        ),
+    )
+    verify_cmd.add_argument(
+        "--container-image", default=None, metavar="IMAGE",
+        help=(
+            "run the test command inside this docker image with "
+            "--network none and the worktree bind-mounted read-write "
+            "— hard isolation for untrusted patches; docker must be "
+            "usable or the verification refuses (never a silent host "
+            "fallback)"
+        ),
     )
     verify_cmd.add_argument("--output", default=None)
 
@@ -698,6 +721,8 @@ def main(argv=None):
                     transfer_branch=args.transfer_branch,
                     approve=args.approve,
                     timeout=args.timeout,
+                    patch_provenance=args.patch_provenance,
+                    container_image=args.container_image,
                 )
             except VerifyRepairError as exc:
                 # Exit contract: 2 = refusal — invalid request, patch
