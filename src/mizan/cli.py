@@ -431,6 +431,16 @@ def main(argv=None):
         help="test/git subprocess timeout (default: 600)",
     )
     verify_cmd.add_argument("--output", default=None)
+    verify_cmd.add_argument(
+        "--patch-provenance",
+        choices=["untrusted", "trusted"],
+        default="untrusted",
+        help="untrusted refuses host execution; trusted explicitly permits it",
+    )
+    verify_cmd.add_argument(
+        "--container-image", default=None, metavar="IMAGE",
+        help="run patch tests inside a network-off Docker container",
+    )
 
     ledger_cmd = commands.add_parser("ledger")
     ledger_cmd.add_argument("message")
@@ -698,6 +708,8 @@ def main(argv=None):
                     transfer_branch=args.transfer_branch,
                     approve=args.approve,
                     timeout=args.timeout,
+                    patch_provenance=args.patch_provenance,
+                    container_image=args.container_image,
                 )
             except VerifyRepairError as exc:
                 # Exit contract: 2 = refusal — invalid request, patch
