@@ -106,7 +106,7 @@ class TestBaselineCLI(unittest.TestCase):
         _offline_env(self)
 
     def test_bm_118_baseline_command_saves_fingerprints(self):
-        """BM-118: CLI baseline --save writes mizan-baseline/1 doc."""
+        """BM-118: CLI baseline --save writes a content-anchored (F-03) doc."""
         from mizan.cli import main as cli_main
         from mizan.gate import load_baseline
         root = _make_project(tempfile.mkdtemp())
@@ -123,7 +123,8 @@ class TestBaselineCLI(unittest.TestCase):
             sys.argv = old_argv
 
         doc = load_baseline(target)
-        self.assertEqual(doc["schema"], "mizan-baseline/1")
+        self.assertEqual(doc["schema"], "mizan-baseline/2")
+        self.assertEqual(doc["fingerprint_scheme"], "content-anchored")
         self.assertEqual(doc["note"], "q2 dogfood")
         self.assertGreater(doc["count"], 0)
 
