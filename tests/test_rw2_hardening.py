@@ -5,7 +5,8 @@ RW-202  partial scan must never gate-pass ("incomplete" decision, exit 2)
 RW-203  OSV failures are never cached as clean + vuln-scan exit contract
 RW-204  full-scan gate actually sees OSV findings / errors (wiring)
 RW-205  Action scan step: exit-code contract, SARIF validity, no COUNT=0
-RW-206  Action approve step: env + argv-array, no eval, injection-proof
+RW-206  Action approve step: DELETED (F-01, 2026-11-26 live audit) — the
+        tests now assert the step and its inputs are GONE and stay gone
 
 The Action tests (RW-205/206) extract the REAL step scripts from
 action/action.yml at runtime — the tests always exercise the shipped
@@ -371,7 +372,7 @@ class _ActionHarness(unittest.TestCase):
         with open(stub, "w") as fh:
             fh.write(stub_script or (
                 '#!/usr/bin/env bash\n'
-                'printf \'%s\\0\' "$@" > "$MIZAN_STUB_ARGS"\n'
+                'printf \x27%s\\0\x27 "$@" > "$MIZAN_STUB_ARGS"\n'
                 'exit "${MIZAN_STUB_EXIT:-0}"\n'
             ))
         os.chmod(stub, os.stat(stub).st_mode | stat.S_IEXEC)
@@ -505,67 +506,43 @@ class TestActionScanStep(_ActionHarness):
             "injection would have created the marker file")
 
 
-class TestActionApproveStep(_ActionHarness):
-    """RW-206: no eval; every input is a literal argv element."""
+class TestActionApproveStepRemoved(unittest.TestCase):
+    """F-01 (2026-11-26 live audit): the executive approve/merge step
+    contradicted the project's own "final merge is human" policy, so it
+    is deleted outright. These tests keep it deleted: the step, its four
+    inputs, and any CLI wiring for them must never come back."""
 
-    def test_values_pass_as_literal_array_arguments(self):
-        result = self._run_step(
-            "Auto-approve and merge (safe)",
-            env_extra={
-                "PR_NUMBER": "7",
-                "FINDINGS_COUNT": "0",
-                "EXCLUDE_PATHS": ".github/,Dockerfile",
-                "ALLOWED_AUTHORS": "dependabot[bot]",
-                "APPROVE_PRS": "true",
-                "MERGE_PRS": "false",
-            },
+    def _action_doc(self):
+        return yaml.safe_load(
+            (Path(__file__).resolve().parent.parent / "action" / "action.yml")
+            .read_text(encoding="utf-8")
         )
-        self.assertEqual(result["rc"], 0)
-        args = result["stub_args"]
-        self.assertEqual(args[0], "approve")
-        self.assertIn("--approve", args)
-        self.assertNotIn("--merge", args)
-        idx = args.index("--exclude-paths")
-        self.assertEqual(args[idx + 1], ".github/,Dockerfile")
 
-    def test_shell_metacharacters_are_never_executed(self):
-        hostile = "a'; rm -rf marker-pwn; #"
-        result = self._run_step(
-            "Auto-approve and merge (safe)",
-            env_extra={
-                "PR_NUMBER": "7",
-                "FINDINGS_COUNT": "0",
-                "EXCLUDE_PATHS": hostile,
-                "ALLOWED_AUTHORS": "dependabot[bot]",
-                "APPROVE_PRS": "false",
-                "MERGE_PRS": "false",
-            },
-        )
-        self.assertEqual(result["rc"], 0)
-        args = result["stub_args"]
-        idx = args.index("--exclude-paths")
-        self.assertEqual(args[idx + 1], hostile,
-                         "hostile input must arrive as ONE literal argument")
-        self.assertFalse(os.path.exists(
-            os.path.join(result["workdir"], "marker-pwn")),
-            "rm -rf would have created the marker via injection")
+    def test_approve_merge_step_is_deleted(self):
+        with self.assertRaises(LookupError):
+            _action_step("Auto-approve and merge (safe)")
+        raw = (Path(__file__).resolve().parent.parent
+               / "action" / "action.yml").read_text(encoding="utf-8")
+        self.assertNotIn("approve-prs", raw)
+        self.assertNotIn("merge-prs", raw)
+        self.assertNotIn("approve-exclude-paths", raw)
+        self.assertNotIn("approve-allowed-authors", raw)
+        self.assertNotIn("gh pr merge", raw)
+        self.assertNotIn("gh pr review", raw)
 
-    def test_merge_prs_implies_approve(self):
-        result = self._run_step(
-            "Auto-approve and merge (safe)",
-            env_extra={
-                "PR_NUMBER": "7",
-                "FINDINGS_COUNT": "0",
-                "EXCLUDE_PATHS": ".github/",
-                "ALLOWED_AUTHORS": "dependabot[bot]",
-                "APPROVE_PRS": "false",
-                "MERGE_PRS": "true",
-            },
+    def test_cli_approve_is_report_only(self):
+        cli_src = (Path(__file__).resolve().parent.parent
+                   / "src" / "mizan" / "cli.py").read_text(encoding="utf-8")
+        self.assertNotIn('add_argument("--merge"', cli_src)
+        self.assertIn(
+            '"--report", required=True', cli_src,
+            "the approve command must measure from a mandatory report "
+            "file (F-02), never from a trusted --findings flag",
         )
-        self.assertEqual(result["rc"], 0)
-        args = result["stub_args"]
-        self.assertEqual(args.count("--approve"), 1)
-        self.assertIn("--merge", args)
+        self.assertNotIn(
+            'approve_cmd.add_argument("--findings"', cli_src,
+            "--findings (trust a number) must stay deleted (F-02)",
+        )
 
 
 if __name__ == "__main__":

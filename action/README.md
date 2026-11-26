@@ -40,12 +40,13 @@ elevate them. Grant only what the features you enable actually need:
 |---|---|
 | Scan + fail on findings | `contents: read` |
 | Upload SARIF to Code Scanning | + `security-events: write` |
-| `create-pr: true` (push fix branch, open PR) | + `contents: write` |
-| Comment/approve/merge PRs (`approve-prs` / `merge-prs`) | + `pull-requests: write` |
+| `create-pr: true` (push fix branch, open PR, label it) | + `contents: write` and `pull-requests: write` |
 
-`approve-prs` and `merge-prs` are **off by default** and are refused for
-PRs authored by anyone outside `approve-allowed-authors` or touching
-`approve-exclude-paths`. Review both lists before enabling them.
+F-01 (2026-11-26 live audit): the Action has **no** approve/merge
+capability and never will — the merge decision always belongs to a
+human. The former `approve-prs` / `merge-prs` inputs were deleted with
+their workflow step; a guard test keeps every executable surface free
+of `gh pr merge` / `gh pr review` calls.
 
 ## Inputs
 
@@ -57,10 +58,6 @@ PRs authored by anyone outside `approve-allowed-authors` or touching
 | fail-on-findings | true | Exit 1 on findings |
 | sarif-output | mizan-results.sarif | SARIF path |
 | python-version | 3.11 | Python version |
-| approve-prs | false | Auto-approve eligible PRs (off by default) |
-| merge-prs | false | Auto-merge after approval (implies approve-prs) |
-| approve-exclude-paths | .github/,Dockerfile,.env,... | Paths that block auto-approval |
-| approve-allowed-authors | dependabot[bot],renovate[bot],... | Bot authors eligible for auto-approval |
 | fail-on-fix-error | false | Exit 1 when `mizan fix` errors — the failure is **always** surfaced as an `::error` and the `fix-status` output reports it; this input only decides whether it also fails the workflow |
 | fail-on-pr-error | false | Exit 1 when creating the fix PR errors — the failure is **always** surfaced as an `::error` and the `pr-status` output reports it; this input only decides whether it also fails the workflow |
 

@@ -32,22 +32,11 @@ inputs:
     required: false
     default: '3.15'
 
-  approve-prs:
-    description: 'Auto-approve eligible PRs (off by default; requires care)'
-    required: false
-    default: 'false'
-  merge-prs:
-    description: 'Auto-merge PRs after approval (implies approve-prs)'
-    required: false
-    default: 'false'
-  approve-exclude-paths:
-    description: 'Comma-separated paths that block auto-approval'
-    required: false
-    default: '.github/,Dockerfile,.env,secrets/,k8s/,terraform/,helm/'
-  approve-allowed-authors:
-    description: 'Comma-separated bot authors allowed to be auto-approved'
-    required: false
-    default: 'dependabot[bot],renovate[bot],github-actions[bot]'
+  # F-01 (2026-11-26 live audit): the four auto-approve/auto-merge
+  # inputs and their workflow step are DELETED — "final merge is human"
+  # is the project's stated policy, and the auto-approve capability
+  # contradicted it. There is no replacement input by design; the guard
+  # test (tests/test_no_merge_capability.py) keeps this surface clean.
   fail-on-fix-error:
     description: 'Fail the workflow when mizan fix errors (default: false, but the failure is ALWAYS surfaced as an ::error and the fix-status output reports it — it is never silently swallowed)'
     required: false
@@ -219,34 +208,10 @@ runs:
           gh pr edit "$PR_URL" --add-label "$L" 2>/dev/null || true
         done
 
-    - name: Auto-approve and merge (safe)
-      if: |
-        github.event_name == 'pull_request'
-        && (inputs.approve-prs == 'true' || inputs.merge-prs == 'true')
-        && inputs.create-pr != 'true'
-      shell: bash
-      env:
-        GH_TOKEN: ${{ github.token }}
-        PR_NUMBER: ${{ github.event.pull_request.number }}
-        FINDINGS_COUNT: ${{ steps.scan.outputs.findings-count }}
-        EXCLUDE_PATHS: ${{ inputs.approve-exclude-paths }}
-        ALLOWED_AUTHORS: ${{ inputs.approve-allowed-authors }}
-        APPROVE_PRS: ${{ inputs.approve-prs }}
-        MERGE_PRS: ${{ inputs.merge-prs }}
-      run: |
-        # RW-206: NO eval, NO string-built commands. Every value arrives
-        # through the environment and is passed as a literal argument via a
-        # bash array — shell metacharacters in inputs can never execute.
-        args=(approve
-          --pr "$PR_NUMBER"
-          --findings "$FINDINGS_COUNT"
-          --exclude-paths "$EXCLUDE_PATHS"
-          --allowed-authors "$ALLOWED_AUTHORS"
-        )
-        if [ "$APPROVE_PRS" = "true" ]; then args+=(--approve); fi
-        if [ "$MERGE_PRS" = "true" ]; then args+=(--approve --merge); fi
-        echo "Running: mizan ${args[*]}"
-        mizan "${args[@]}"
+    # F-01 (2026-11-26 live audit): the former "Auto-approve and merge
+    # (safe)" step (RW-206) is deleted together with its inputs. The
+    # merge decision always belongs to a human; the guard test keeps
+    # every executable surface free of the gh review/merge subcommands.
 
     - name: Fail on findings
       if: inputs.fail-on-findings == 'true' && steps.scan.outputs.findings-count != '0'
