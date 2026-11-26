@@ -81,7 +81,7 @@ not aspirational marketing.
 | Sampled findings verified true positives | **20/20**, zero security FPs | v0.12.0 field notes |
 | MIZAN scanning its own repository | **0 actionable findings** across all scanners | v0.12.1+, strict `--gate` |
 | Field benchmark — 100 real open-source repos (zai-org first, Nov 2026) | **median 1.04 s / repo**, 0 crashes, 0 timeouts | v0.12.2 field wave |
-| Test suite | **777 tests green**, Python 3.11–3.15 | CI, every push |
+| Test suite | **787 tests green**, Python 3.11–3.15 | CI, every push |
 | Trusted CI steps that can hide a failure | **0** (`continue-on-error` removed) | v0.12.1 |
 
 ## Measured accuracy — scope and limits (E-02, 2026-11-17 review)
@@ -248,6 +248,12 @@ mizan full-scan . --baseline .mizan/baseline.json
 ```
 
 Only findings whose fingerprint is not in the baseline reach the gate.
+Baselines saved by MIZAN 0.17.0-dev+ are **content-anchored** (F-03,
+2026-11-26 live audit): a code finding's fingerprint anchors on the
+offending line's TEXT, so pure line shifts (insert/delete above the
+finding) no longer re-fire a suppressed finding — the text itself
+changing re-fires honestly. Historical `mizan-baseline/1` files keep
+working unchanged; regenerate to opt into content anchoring.
 
 ## Evolution
 

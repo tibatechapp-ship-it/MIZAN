@@ -804,6 +804,7 @@ def main(argv=None):
                     blocking=severities,
                     baseline_path=args.baseline,
                     incomplete_sources=incomplete,
+                    root=args.path,
                 )
             if args.format == "html":
                 rendered = render_html(result)
@@ -921,6 +922,7 @@ def main(argv=None):
                     blocking=severities,
                     baseline_path=args.baseline,
                     incomplete_sources=incomplete,
+                    root=args.path,
                 )
             rendered = json.dumps(
                 result, indent=2, ensure_ascii=False
@@ -955,7 +957,8 @@ def main(argv=None):
             from .gate import collect_findings, save_baseline
             full = full_scan_repository(args.path, jobs=args.jobs)
             findings = collect_findings(full)
-            doc = save_baseline(findings, path=args.save, note=args.note)
+            doc = save_baseline(findings, path=args.save, note=args.note,
+                                root=args.path)
             print(json.dumps({
                 "tool": "MIZAN Security",
                 "baseline": doc["schema"],
