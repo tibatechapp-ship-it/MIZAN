@@ -822,7 +822,7 @@ CI نفسه (`python -m unittest discover -s tests`)، وأُعيد تشغيله
   القاموس (`password = "hardcoded"`)، علامات واضحة (example/sample/dummy/
   fake/smoke/placeholder)، والقيم المنحلة (`********`). الحد الأدنى 8
   أحرف كان موجودًا وبقي.
-- **dynamic-execution في JS/TS:** الـ regex الأعمى `` `(eval|exec)\s*\(` ``
+- **dynamic-execution في JS/TS:** الـ regex الأعمى `` `\b(eval|exec)\s*\(` ``
   كان يلتقط `RegExp.exec()` وذكر "exec" في التعليقات وتواقيع TypeScript —
   230 نتيجة كاذبة في مستودع واحد. الآن: حدود استدعاء عارية
   `(?<![.\w$])` + تخطي أسطر التعليقات + تمييز تواقيع TS، مع بقاء
