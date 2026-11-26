@@ -4,6 +4,11 @@ Standards:
 - Least Privilege (only trusted bots)
 - Defense in Depth (7 independent gates)
 - Opt-in only (disabled by default)
+
+F-01/F-02 (2026-11-26 live audit): the executive approve/merge helpers
+are deleted — the module is report-only. BM-56+ below benchmark the
+replacement contract: findings are MEASURED from a report file, and a
+report that cannot be measured is never "0 findings".
 """
 import json
 import tempfile
@@ -15,9 +20,8 @@ from mizan.approval import (
     DEFAULT_ALLOWED_AUTHORS,
     DEFAULT_EXCLUDE_PATHS,
     _path_is_excluded,
-    approve_pr,
     is_pr_eligible,
-    merge_pr,
+    measure_report_findings,
 )
 
 
@@ -154,6 +158,71 @@ class OtherGatesBenchmark(unittest.TestCase):
         ok, reason = is_pr_eligible(1)
         self.assertFalse(ok)
         self.assertIn("checks", reason)
+
+# ---------- BM-56+: F-01/F-02 measured-report contract ----------
+
+class MeasuredReportBenchmark(unittest.TestCase):
+    """F-02: eligibility is measured from a report file, never trusted
+    from a flag; an unmeasurable report refuses (exit-2 semantics)."""
+
+    def _write(self, name, content):
+        d = tempfile.mkdtemp()
+        p = Path(d) / name
+        p.write_text(content, encoding="utf-8")
+        return p
+
+    def test_56_sarif_count_is_measured(self):
+        """BM-56: SARIF results[] length is the measured count."""
+        sarif = self._write("r.sarif", json.dumps({
+            "runs": [{"results": [{"ruleId": "x"}, {"ruleId": "y"}]}],
+        }))
+        count, meta = measure_report_findings(sarif)
+        self.assertEqual(count, 2)
+        self.assertEqual(meta["format"], "sarif")
+
+    def test_57_mizan_json_count_is_measured(self):
+        """BM-57: len(findings[]) is the measured count."""
+        doc = self._write("r.json", json.dumps({
+            "findings": [{"rule": "a"}, {"rule": "b"}, {"rule": "c"}],
+            "findings_count": 99,  # stale declared counter
+        }))
+        count, meta = measure_report_findings(doc)
+        self.assertEqual(count, 3)
+        self.assertEqual(meta["declared_findings_count_mismatch"], 99)
+
+    def test_58_missing_report_is_refused(self):
+        """BM-58: a missing report is NEVER "0 findings"."""
+        with self.assertRaises(ValueError) as ctx:
+            measure_report_findings(Path("/nonexistent/report.sarif"))
+        self.assertIn("not found", str(ctx.exception))
+
+    def test_59_malformed_report_is_refused(self):
+        """BM-59: malformed JSON refuses with the path named."""
+        bad = self._write("bad.sarif", "{not json")
+        with self.assertRaises(ValueError) as ctx:
+            measure_report_findings(bad)
+        self.assertIn("bad.sarif", str(ctx.exception))
+
+    def test_60_empty_sarif_runs_is_refused(self):
+        """BM-60: SARIF with empty runs[] refuses — not counted as clean."""
+        empty = self._write("empty.sarif", json.dumps({"runs": []}))
+        with self.assertRaises(ValueError) as ctx:
+            measure_report_findings(empty)
+        self.assertIn("empty", str(ctx.exception))
+
+    def test_61_unrecognized_format_is_refused(self):
+        """BM-61: a random JSON object refuses instead of guessing."""
+        junk = self._write("junk.json", json.dumps({"hello": "world"}))
+        with self.assertRaises(ValueError) as ctx:
+            measure_report_findings(junk)
+        self.assertIn("not a recognized format", str(ctx.exception))
+
+    def test_62_executive_helpers_are_deleted(self):
+        """BM-62 (F-01): approve_pr / merge_pr no longer exist — the
+        module cannot approve or merge, by absence of the capability."""
+        import mizan.approval as approval_module
+        self.assertFalse(hasattr(approval_module, "approve_pr"))
+        self.assertFalse(hasattr(approval_module, "merge_pr"))
 
 
 if __name__ == "__main__":
