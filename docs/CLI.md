@@ -32,7 +32,7 @@ contract; write-capable flows are explicit, user-driven commands.
 | `merge-findings` | Merge several SARIF reports into grouped findings — link, never erase: every occurrence keeps its tool and evidence | no | no | no (output file only if `--output`) |
 | `triage` | Apply documented review decisions to imported findings — decisions referencing unknown fingerprints are rejected | no | no | no (output file only if `--output`) |
 | `repair-request` | Build a structured `repair-request.v1` handoff for a coding agent — evidence first, no guessing, human review always required | no | no | no (output file only if `--output`) |
-| `verify-repair` | Verify one repair request's patch inside an isolated git worktree — apply, test with no secrets and no network by default, measure the diff and the result; transfer with explicit approval (`--approve`) or delete — the user's tree is never written | no (local git + test subprocess) | no | git worktree under the system temp dir (disposed unless `--keep`), review branch only with explicit approval |
+| `verify-repair` | Verify one repair request's patch inside an isolated git worktree — apply, test with no secrets and no network by default, measure the diff and the result; transfer with explicit approval (`--approve`) or delete — the user's tree is never written. F-07: untrusted patches (the default provenance) refuse to run tests on the host — pass `--container-image` (docker, network-off) or declare `--patch-provenance trusted` | no (local git + test subprocess; container surface needs docker) | no | git worktree under the system temp dir (disposed unless `--keep`), review branch only with explicit approval |
 | `portfolio` | Aggregate full-scan results for MULTIPLE repositories into one self-contained HTML report (display layer) | no | no | HTML output |
 
 ### `repair-request` — structured handoff to a coding agent (wave 3)
@@ -158,6 +158,47 @@ unverified patch is never transferred; without `--keep` the worktree
 is disposed after the report — transfer or delete, nothing else. A
 transferred branch carries `human_review_required=true` in its commit
 message; MIZAN never merges it.
+
+#### F-07: the patch is untrusted by default (2026-11-26 live audit)
+
+The audit demonstrated what the old isolation wording only implied:
+a git worktree plus an environment scrub is **not** a sandbox, so a
+coding agent's patch ran arbitrary test code on the host by default.
+The capability is now gated, not softened:
+
+- **Default = untrusted.** Without one of the two declared escape
+  hatches, `verify-repair` refuses with exit **2** before ANY side
+  effect (no worktree is created for a refused run):
+
+  ```
+  F-07: an untrusted patch refuses to run its tests on the host —
+  pass --container-image IMAGE (docker, network-off) for hard
+  isolation, or declare --patch-provenance trusted to accept host
+  execution explicitly
+  ```
+
+- **`--container-image IMAGE`** — the hard-isolation path. The test
+  command runs inside the image as
+  `docker run --rm --name mizan-verify-<id> --network none -v
+  <worktree>:/src:rw -w /src IMAGE <tests>` — no network, the
+  worktree bind-mounted read-write, and **no host environment
+  variables** (stricter than the host-path secret scrubbing: the
+  image's own env applies). Docker must be usable (`docker info` is
+  probed first) — a container surface that cannot exist refuses with
+  exit **2**, never a silent fallback to the host. A timed-out run's
+  named container is force-removed and recorded.
+- **`--patch-provenance trusted`** — the explicit host-execution
+  declaration. The worktree + env scrub are then the only guards,
+  and the report's isolation limits say so in one added sentence.
+- **Report fields** (`mizan.repair-verification.v1`, schema updated
+  in the same wave): `patch_provenance` (untrusted | trusted),
+  `execution_surface` (host | container), and `container` — null on
+  the host path, otherwise the exact measured contract (image, name,
+  `network: none`, mount, workdir, the full `docker run` command,
+  `container_receives_host_env: false`). The isolation limits grow
+  one surface-specific entry so the report never oversells.
+- The 0/1/2 exit contract above is unchanged; exit **2** now also
+  covers the F-07 refusal and the unusable-docker refusal.
 
 ### `approve` — eligibility report, nothing else (F-01/F-02, 2026-11-26 live audit)
 

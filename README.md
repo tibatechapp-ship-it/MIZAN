@@ -81,7 +81,7 @@ not aspirational marketing.
 | Sampled findings verified true positives | **20/20**, zero security FPs | v0.12.0 field notes |
 | MIZAN scanning its own repository | **0 actionable findings** across all scanners | v0.12.1+, strict `--gate` |
 | Field benchmark — 100 real open-source repos (zai-org first, Nov 2026) | **median 1.04 s / repo**, 0 crashes, 0 timeouts | v0.12.2 field wave |
-| Test suite | **770 tests green**, Python 3.11–3.15 | CI, every push |
+| Test suite | **777 tests green**, Python 3.11–3.15 | CI, every push |
 | Trusted CI steps that can hide a failure | **0** (`continue-on-error` removed) | v0.12.1 |
 
 ## Measured accuracy — scope and limits (E-02, 2026-11-17 review)
@@ -104,13 +104,19 @@ field guarantee:
   precision/recall numbers yet** (roadmap item). Do not extrapolate the
   100/100 to those languages or to arbitrary repositories.
 
-`verify-repair` isolation wording, kept deliberately precise: a repair
-verification runs in a **temporary git worktree with a secret-stripped
-environment** — it is **not a container sandbox**. Test code executes as
-the invoking user and can reach local resources; network is off by
-default only by proxy/variable scrubbing (`--allow-network` restores
-it). For hard isolation run it inside a container with explicit network,
-CPU, and memory limits (recipe in `docs/CLI.md`).
+`verify-repair` isolation wording, kept deliberately precise (F-07,
+2026-11-26 live audit): a coding agent's patch is **untrusted by
+default** — an untrusted patch's tests never run on the host; pass
+`--container-image` (docker, `--network none`, worktree bind-mounted
+read-write) for hard isolation, or declare `--patch-provenance
+trusted` to accept host execution explicitly. On the trusted host
+path a repair verification runs in a **temporary git worktree with a
+secret-stripped environment** — still **not a container sandbox**;
+test code executes as the invoking user and network is off by default
+only by proxy/variable scrubbing (`--allow-network` restores it). In
+the container path the test command runs with no network and NO host
+environment variables; the isolation is as strong as the image and
+docker configuration (recipe in `docs/CLI.md`).
 
 ## Quickstart
 
