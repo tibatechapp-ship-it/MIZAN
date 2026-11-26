@@ -453,25 +453,35 @@ def main(argv=None):
     )
     vuln_cmd.add_argument("--output", "-o", default=None)
 
+    # F-01/F-02 (2026-11-26 live audit): the executive --approve/--merge
+    # capability is DELETED — MIZAN's policy is "final merge is human",
+    # and a report-only eligibility check is the only surface that keeps
+    # that promise. Findings are measured from a mandatory report file
+    # (F-02): a number passed on the command line validates a claim
+    # instead of measuring it, so --findings is gone too.
     approve_cmd = commands.add_parser(
         "approve",
-        help="Safely auto-approve and optionally merge eligible PRs"
+        help=(
+            "Report PR eligibility measured from a scan report — "
+            "report-only: MIZAN never approves or merges PRs"
+        ),
     )
     approve_cmd.add_argument("--pr", type=int, required=True)
-    approve_cmd.add_argument("--findings", type=int, default=0)
+    approve_cmd.add_argument(
+        "--report", required=True, metavar="REPORT",
+        help=(
+            "scan report to measure (SARIF or MIZAN JSON) — findings "
+            "are counted from this file, never from a flag; missing, "
+            "unreadable or malformed reports refuse with exit 2"
+        ),
+    )
     approve_cmd.add_argument("--exclude-paths", default="")
     approve_cmd.add_argument(
         "--allowed-authors",
         default="dependabot[bot],renovate[bot],github-actions[bot]",
     )
     approve_cmd.add_argument("--allow-own", action="store_true",
-                             help="Allow approving PRs from the current bot (not recommended)")
-    approve_cmd.add_argument("--approve", action="store_true")
-    approve_cmd.add_argument("--merge", action="store_true")
-    approve_cmd.add_argument(
-        "--method", choices=["squash", "merge", "rebase"], default="squash"
-    )
-    approve_cmd.add_argument("--dry-run", action="store_true")
+                             help="Allow assessing PRs from the current bot (not recommended)")
 
     fix_cmd = commands.add_parser(
         "fix",
@@ -966,9 +976,20 @@ def main(argv=None):
 
         elif args.command == "approve":
             from .approval import (
-                is_pr_eligible, approve_pr, merge_pr,
+                is_pr_eligible, measure_report_findings,
                 DEFAULT_EXCLUDE_PATHS, DEFAULT_ALLOWED_AUTHORS,
             )
+
+            # F-02: measure, never trust. A report that cannot be
+            # measured refuses with exit 2 — it is never "0 findings".
+            try:
+                findings_count, report_meta = measure_report_findings(
+                    args.report
+                )
+            except ValueError as exc:
+                parser.error(
+                    f"refusing to assess eligibility — {exc}"
+                )
 
             excludes = [x.strip() for x in (args.exclude_paths or "").split(",") if x.strip()]
             if not excludes:
@@ -982,37 +1003,21 @@ def main(argv=None):
 
             ok, reason = is_pr_eligible(
                 args.pr,
-                findings_count=args.findings,
+                findings_count=findings_count,
                 exclude_paths=tuple(excludes),
                 allowed_authors=tuple(authors),
             )
 
+            print(f"report     : {report_meta['format']} "
+                  f"({report_meta['derived']})")
+            print(f"findings   : {findings_count} "
+                  f"(measured from {args.report})")
             print(f"eligibility: {'ELIGIBLE' if ok else 'BLOCKED'}")
             print(f"reason     : {reason}")
+            print("action     : none — MIZAN never approves or merges; "
+                  "a human decides (F-01)")
 
-            if not ok:
-                return 1
-
-            if args.dry_run:
-                print("dry-run: no action taken")
-                return 0
-
-            if args.approve:
-                success, msg = approve_pr(
-                    args.pr,
-                    comment="Auto-approved by MIZAN: all checks passed, no findings.",
-                )
-                print(f"approve    : {'OK' if success else 'FAILED'} ({msg[:100]})")
-                if not success:
-                    return 1
-
-            if args.merge:
-                success, msg = merge_pr(args.pr, method=args.method, auto=True)
-                print(f"merge      : {'OK' if success else 'FAILED'} ({msg[:100]})")
-                if not success:
-                    return 1
-
-            return 0
+            return 0 if ok else 1
 
         elif args.command == "fix":
             from .fix import main as fix_main
