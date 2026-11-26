@@ -25,7 +25,7 @@ contract; write-capable flows are explicit, user-driven commands.
 | `doc-scan` | Documentation Intelligence: verify docs match reality (links, stale references, coverage, endpoints, README) | no | no | no |
 | `ledger` | engineering ledger record — `mizan ledger --actor {human,chatgpt,joint} "message"` | no | no | ledger file |
 | `vuln-scan` | Scan dependencies for known vulnerabilities via OSV.dev | yes — OSV.dev, batched + cached | no | cache dir |
-| `approve` | Safely auto-approve and optionally merge eligible PRs | no (local git) | no | git state (explicit) |
+| `approve` | Report PR eligibility measured from a scan report — report-only: MIZAN never approves or merges PRs (F-01); findings are counted from a mandatory report file, never from a flag (F-02) | no (local git, read-only gh) | no | no |
 | `fix` | Apply safe dependency upgrades with test-based validation | no — runs your tests locally | no | yes (explicit) |
 | `baseline` | Save current findings as a gate baseline (delta scanning) | no | no | `.mizan/baseline.json` |
 | `import-sarif` | Import an external SARIF 2.1.0 report (Semgrep, Gitleaks, Trivy, Bandit, ...) into MIZAN's normalized finding schema — read-only, provenance preserved, failures are loud | no | no | no (output file only if `--output`) |
@@ -158,6 +158,34 @@ unverified patch is never transferred; without `--keep` the worktree
 is disposed after the report — transfer or delete, nothing else. A
 transferred branch carries `human_review_required=true` in its commit
 message; MIZAN never merges it.
+
+### `approve` — eligibility report, nothing else (F-01/F-02, 2026-11-26 live audit)
+
+```bash
+mizan vuln-scan . --format sarif -o report.sarif
+mizan approve --pr 42 --report report.sarif
+```
+
+The 2026-11-26 live audit (F-01, high) demonstrated that the old
+`--approve` / `--merge` executive path could emit `gh` review/merge
+calls — contradicting the project's own "final merge is human" policy.
+The capability is **deleted**: `approve` is now a READ-ONLY eligibility
+report (gh `view`/`checks` only), and the human decides.
+
+Findings are **measured, never trusted** (F-02): the old `--findings N`
+flag — whose default of 0 let any caller claim a clean scan — is gone.
+The report file is mandatory:
+
+| Report input | Behaviour |
+|---|---|
+| SARIF (`runs[].results[]`) | measured count = sum of `results[]` lengths |
+| MIZAN JSON (`findings[]`) | measured count = `len(findings[])`; a stale declared `findings_count` is reported as a mismatch |
+| missing / unreadable / malformed / unrecognized | **exit 2 refusal** — never counted as "0 findings" (RW-205 doctrine) |
+
+Exit contract: **0** = ELIGIBLE (report-only — no action taken, the
+measured basis is printed); **1** = BLOCKED (reason stated); **2** =
+refusal (report cannot be measured). Every finding in the measured
+report blocks eligibility (conservative by design).
 
 ## Exit contract (enforced, documented in README §The gate)
 
